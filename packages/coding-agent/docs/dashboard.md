@@ -175,15 +175,17 @@ memory scopes, recent-project choices, and new-session shortcuts.
 A live runtime has a separate effective CWD. Valid historical paths are
 canonicalized and continue to resume directly. If the historical path is
 unavailable, Dashboard requires the user to choose an existing absolute
-directory; missing paths and regular files are rejected before the RPC child is
-created. Tools, initial project context, settings, extensions, skills, git state,
+directory; missing, unreadable, and non-directory paths are rejected before the
+RPC child is created. Tools, initial project context, settings, extensions, skills, git state,
 and project agent discovery use the effective runtime directory. Fleet cards and
 session chrome show that effective directory and retain the historical path as a
 separate note whenever they differ. Switching to another transcript inside an
 existing runtime does not change the process CWD.
 
 Choosing a fallback never rewrites the original session header. Normal resumed
-work can still append conversation entries, and existing session-format migration
+work can still append conversation entries. Starting `/new` from that runtime
+records the effective runtime directory in the new session's header, while the
+source transcript retains its historical path. Existing session-format migration
 behavior is unchanged.
 
 ### Dispatch Arbiter observability

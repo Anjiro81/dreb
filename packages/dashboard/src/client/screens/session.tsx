@@ -1691,8 +1691,7 @@ export function SessionScreen(props: { store: AppStore; sessionKey: string }): J
 		const effective = sessionCwd();
 		const historical = historicalCwd();
 		if (!effective || !historical) return undefined;
-		const comparableHistorical = historicalSession()?.resolvedCwd ?? historical;
-		return comparableHistorical === effective ? undefined : historical;
+		return historical === effective ? undefined : historical;
 	};
 	const cwdWithBranch = () => {
 		const cwd = sessionCwd();

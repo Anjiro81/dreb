@@ -2208,7 +2208,7 @@ export class AgentSession {
 		await this.abort();
 		this.agent.reset();
 		this._dispatchArbiter.clearContext();
-		this.sessionManager.newSession({ parentSession: options?.parentSession });
+		this.sessionManager.newSession({ parentSession: options?.parentSession, cwd: this.cwd });
 		this.agent.sessionId = this.sessionManager.getSessionId();
 		this._steeringMessages = [];
 		this._followUpMessages = [];
@@ -3982,7 +3982,7 @@ export class AgentSession {
 		// offered as editor pre-fill.
 		const { cancelled } = await this._performFork(entryId, (previousSessionFile) => {
 			if (!selectedEntry.parentId) {
-				this.sessionManager.newSession({ parentSession: previousSessionFile });
+				this.sessionManager.newSession({ parentSession: previousSessionFile, cwd: this.cwd });
 			} else {
 				this.sessionManager.createBranchedSession(selectedEntry.parentId);
 			}

@@ -370,6 +370,20 @@ describe("runRpcMode dashboard dispatcher", () => {
 		}
 	});
 
+	it("records the effective runtime cwd when starting a new session after fallback resume", async () => {
+		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
+		(sessionManager as unknown as { cwd: string }).cwd = "/missing/historical/project";
+
+		try {
+			expect(sessionManager.getHeader()?.cwd).not.toBe(tempDir);
+			await expect(session.newSession()).resolves.toBe(true);
+			expect(sessionManager.getHeader()?.cwd).toBe(tempDir);
+			expect(sessionManager.getCwd()).toBe(tempDir);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it("uses the effective runtime cwd for project agent discovery", async () => {
 		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
 		const agentsDir = join(tempDir, ".dreb", "agents");

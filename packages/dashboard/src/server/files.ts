@@ -9,7 +9,8 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { link, mkdir, open, readdir, realpath, rename, stat, unlink } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, link, mkdir, open, readdir, realpath, rename, stat, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import type { Writable } from "node:stream";
 import type { DirListingDto, FileEntryDto } from "../shared/protocol.js";
@@ -81,6 +82,14 @@ export async function resolveExistingDirectory(rawPath: string): Promise<string>
 	}
 	if (!info.isDirectory()) {
 		throw Object.assign(new Error(`Not a directory: ${path}`), { status: 400 });
+	}
+	try {
+		await access(path, constants.R_OK | constants.X_OK);
+	} catch (err) {
+		throw Object.assign(new Error(`Directory is not readable and searchable: ${path}`), {
+			status: 403,
+			cause: err,
+		});
 	}
 	return path;
 }

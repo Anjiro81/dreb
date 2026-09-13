@@ -68,8 +68,7 @@ function SessionCard(props: { store: AppStore; runtime: RuntimeInfoDto }): JSX.E
 	const historicalCwd = () => {
 		const historical = historicalSession();
 		if (!historical) return undefined;
-		const comparableHistorical = historical.resolvedCwd ?? historical.cwd;
-		return comparableHistorical === props.runtime.cwd ? undefined : historical.cwd;
+		return historical.cwd === props.runtime.cwd ? undefined : historical.cwd;
 	};
 	const activity = () => {
 		const s = session();
@@ -258,6 +257,7 @@ export function FleetScreen(props: { store: AppStore }): JSX.Element {
 	const [resumeSession, setResumeSession] = createSignal<SessionInfoDto>();
 	const [expandedGroups, setExpandedGroups] = createSignal<Record<string, boolean>>({});
 	const [resumeError, setResumeError] = createSignal<string>();
+	const resumeRequests = new Map<string, Promise<void>>();
 
 	// Live sessions: one flat grid, deterministically ordered — alphabetical by
 	// project path, then session start time as tiebreak. Stable ordering beats
@@ -305,12 +305,23 @@ export function FleetScreen(props: { store: AppStore }): JSX.Element {
 		onCleanup(() => clearInterval(timer));
 	});
 
-	async function resumeIn(session: SessionInfoDto, cwd: string): Promise<void> {
-		setResumeError(undefined);
-		const runtime = await api.createRuntime(cwd, { sessionPath: session.path });
-		props.store.upsertRuntime(runtime);
-		await props.store.refreshDiskSessions();
-		props.store.navigate({ screen: "session", key: runtime.key });
+	function resumeIn(session: SessionInfoDto, cwd: string): Promise<void> {
+		const existing = resumeRequests.get(session.path);
+		if (existing) return existing;
+
+		const request = Promise.resolve()
+			.then(async () => {
+				setResumeError(undefined);
+				const runtime = await api.createRuntime(cwd, { sessionPath: session.path });
+				props.store.upsertRuntime(runtime);
+				// Runtime creation is authoritative. Inventory refresh failure is surfaced
+				// separately and must not make a successful resume retryable.
+				void props.store.refreshDiskSessions().catch(() => {});
+				props.store.navigate({ screen: "session", key: runtime.key });
+			})
+			.finally(() => resumeRequests.delete(session.path));
+		resumeRequests.set(session.path, request);
+		return request;
 	}
 
 	async function resume(session: SessionInfoDto): Promise<void> {
@@ -319,7 +330,9 @@ export function FleetScreen(props: { store: AppStore }): JSX.Element {
 			return;
 		}
 		try {
-			await resumeIn(session, session.resolvedCwd ?? session.cwd);
+			// Re-resolve the historical path at runtime creation time rather than
+			// trusting an inventory-time canonical target that a symlink may outlive.
+			await resumeIn(session, session.cwd);
 		} catch (err) {
 			const status = (err as { status?: unknown })?.status;
 			if (status === 400 || status === 404) {

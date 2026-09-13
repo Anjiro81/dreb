@@ -44,7 +44,9 @@ export function ResumeSessionModal(props: {
 	return (
 		<Modal
 			title="choose runtime directory"
-			onDismiss={props.onClose}
+			onDismiss={() => {
+				if (!busy()) props.onClose();
+			}}
 			class="resume-session-modal"
 			actions={
 				<>

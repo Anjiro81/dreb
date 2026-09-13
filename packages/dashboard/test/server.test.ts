@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { type IncomingMessage, request, type Server, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -841,6 +841,26 @@ describe("dashboard server — fleet and runtimes", () => {
 		expect(create).toHaveBeenCalledWith(canonicalDir, "/sessions/resume.jsonl");
 		expect(pool.get(body.key)).toBeDefined();
 	});
+
+	it.skipIf(process.platform === "win32" || (typeof process.getuid === "function" && process.getuid() === 0))(
+		"POST /api/runtimes rejects unreadable directories before pool creation",
+		async () => {
+			const dir = await mkdtemp(join(tmpdir(), "dreb-dash-server-unreadable-"));
+			tempDirs.push(dir);
+			await chmod(dir, 0o000);
+			const { base, pool } = await startServer();
+			const create = vi.spyOn(pool, "create");
+
+			const response = await fetch(`${base}/api/runtimes`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ cwd: dir }),
+			});
+
+			expect(response.status).toBe(403);
+			expect(create).not.toHaveBeenCalled();
+		},
+	);
 
 	it("fallback runtime creation does not rewrite the session header cwd", async () => {
 		const runtimeCwd = await createTempProject();
