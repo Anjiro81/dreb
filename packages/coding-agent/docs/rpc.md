@@ -1344,7 +1344,7 @@ Note: with `summarize: true` the command is LLM-bound and can take a while. `Rpc
 
 Persistent settings, backed by the settings file (see [settings.md](settings.md)). They are normally distinct from live session state, with global-only control/security-policy exceptions:
 
-- **Persistent defaults** (`get_settings` / `set_settings`): provider/model, thinking level, queue modes, compaction/retry/image/skill/thinking-display/transport toggles, automatic-compaction continuation, `maxConcurrentSubagents`, `enabledModels`, `tabTitle`, and per-agent model fallback lists seed fresh runtimes. Writing these ordinary defaults does **not** change a running session.
+- **Persistent defaults** (`get_settings` / `set_settings`): provider/model, thinking level, queue modes, compaction/retry/image/skill/thinking-display/transport toggles, automatic-compaction continuation, `maxConcurrentSubagents`, `enabledModels`, `tabTitle`, and per-agent model fallback lists seed fresh runtimes. Writing these ordinary defaults does **not** change a running session—except `singleModelMode`, which is read at each subagent spawn, so a write takes effect from the next spawn in the writing session (and from session start everywhere else).
 - **Global nested-context trust policy** (`autoLoadNestedContext`, `trustedContextFolders`, `effectiveTrustedContextRoots`, and the trust commands below): this is read from `~/.dreb/agent/settings.json` only, never project settings. Active main/subagent processes observe it for **future lazy nested/out-of-cwd loads**; it cannot remove content already injected into a conversation. It does not govern the separate initial upward context scan from the launch cwd.
 - **Global Dispatch Arbiter policy** (`subagentArbiter`): the complete object is read/written globally and project settings cannot shadow it. Enabled runtimes consume it before future subagent spawns; it does not rewrite already-started children.
 - **Runtime state** (`get_state` / `set_model` / `set_thinking_level` / `set_steering_mode` / `set_follow_up_mode` / `set_auto_compaction` / `set_auto_retry`): the state of the live session. Note that the runtime setters also persist their values as new defaults as a side effect.
@@ -1383,6 +1383,7 @@ Response:
     "effectiveTrustedContextRoots": ["/home/user/src/my-company"],
     "transport": "sse",
     "hideThinkingBlock": false,
+    "singleModelMode": false,
     "agentModels": {
       "Explore": ["anthropic/sonnet", "openai/gpt-5"]
     },
@@ -1527,6 +1528,7 @@ Response is the full settings snapshot after the write (same shape as `get_setti
     "effectiveTrustedContextRoots": ["/home/user/src/my-company"],
     "transport": "sse",
     "hideThinkingBlock": false,
+    "singleModelMode": false,
     "agentModels": {}
   }
 }
@@ -1554,6 +1556,7 @@ Project-shadow warning example (the global write still lands, but the returned m
     "effectiveTrustedContextRoots": [],
     "transport": "sse",
     "hideThinkingBlock": false,
+    "singleModelMode": false,
     "agentModels": {
       "Explore": ["project/model"]
     },
@@ -1583,6 +1586,7 @@ Valid keys and values:
 | `trustedContextFolders` | Replaces the global list atomically. Array of non-empty paths that expand to absolute, existing directories; each is canonicalized with native `realpath`, then deduplicated/subsumed. Relative, missing, non-directory, and broken-symlink entries are rejected. |
 | `transport` | `"sse"`, `"websocket"`, `"auto"` |
 | `hideThinkingBlock` | boolean |
+| `singleModelMode` | boolean; default `false`. When `true`, every subagent runs on the parent session's model — per-invocation overrides, per-agent model lists, agent-definition models, and the dispatch arbiter are bypassed, and any requested model selection is reported as a warning prepended to the child's output |
 | `agentModels` | Plain object mapping agent names to arrays of non-empty model id strings; empty arrays remove the global entry for that agent |
 | `enabledModels` | Non-empty ordered array of available exact `provider/model` references, or explicit `null` to remove the global filter and restore implicit all. Duplicate, glob, fuzzy, and thinking-suffix entries are rejected. |
 | `subagentArbiter` | Complete global-only object or `null`. Keys: `enabled` boolean, exact available `model`, optional valid/capability-supported `thinking`, non-empty `guidePath`. Enabling requires `model`. Unknown nested keys are rejected. |
@@ -1779,7 +1783,7 @@ Response:
 | `tool_execution_update` | Tool execution progress (streaming output) |
 | `tool_execution_end` | Tool completes |
 | `stream_retry` | Stream dropped mid-turn; retrying (partial output discarded) |
-| `length_retry` | Response hit the token limit; retrying with a larger budget |
+| `length_retry` | Response hit the token limit; retrying at the configured output limit |
 | `auto_compaction_start` | Auto-compaction begins |
 | `auto_compaction_end` | Auto-compaction completes |
 | `context_window_upgrade` | Wire model tier auto-upgraded (e.g. Kimi K3 256k → 1M); includes `provider`, `modelId`, `fromContextWindow`, `toContextWindow` |
