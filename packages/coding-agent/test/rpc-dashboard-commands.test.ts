@@ -1,13 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Model } from "@dreb/ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExtensionRuntime } from "../src/core/extensions/loader.js";
 import { getGitBranch } from "../src/core/git-branch.js";
 import * as outputGuard from "../src/core/output-guard.js";
 import { createSyntheticSourceInfo } from "../src/core/source-info.js";
+import type { TabTitleDeps } from "../src/core/tab-title.js";
 import type {
 	RpcDashboardSnapshot as AggregateRpcDashboardSnapshot,
 	RpcEvent as AggregateRpcEvent,
@@ -32,6 +33,22 @@ import {
 	runRpcMode,
 } from "../src/modes/rpc/rpc-mode.js";
 import { createTestResourceLoader, createTestSession } from "./utilities.js";
+
+const capturedTabTitleDeps = vi.hoisted(() => [] as TabTitleDeps[]);
+
+vi.mock("../src/core/tab-title.js", () => ({
+	TabTitleGenerator: class {
+		readonly enabled = true;
+
+		constructor(_settings: unknown, deps: TabTitleDeps) {
+			capturedTabTitleDeps.push(deps);
+		}
+
+		onToolEnd(): void {}
+
+		onMessageEnd(): void {}
+	},
+}));
 
 const tempDirs: string[] = [];
 
@@ -350,6 +367,102 @@ describe("git branch helper used by RPC", () => {
 });
 
 describe("runRpcMode dashboard dispatcher", () => {
+	it("uses the effective runtime cwd for git discovery when session provenance differs", async () => {
+		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
+		mkdirSync(join(tempDir, ".git"));
+		writeFileSync(join(tempDir, ".git", "HEAD"), "ref: refs/heads/runtime-project\n");
+		(sessionManager as unknown as { cwd: string }).cwd = "/missing/historical/project";
+
+		try {
+			const outputs = await dispatchRpcCommand(session, { id: "runtime-cwd", type: "get_git_branch" });
+			expect(outputs[0]).toMatchObject({
+				id: "runtime-cwd",
+				success: true,
+				data: { branch: "runtime-project" },
+			});
+			expect(session.cwd).toBe(tempDir);
+			expect(session.sessionManager.getCwd()).toBe("/missing/historical/project");
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("records the effective runtime cwd when starting a new session after fallback resume", async () => {
+		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
+		(sessionManager as unknown as { cwd: string }).cwd = "/missing/historical/project";
+
+		try {
+			expect(sessionManager.getHeader()?.cwd).not.toBe(tempDir);
+			await expect(session.newSession()).resolves.toBe(true);
+			expect(sessionManager.getHeader()?.cwd).toBe(tempDir);
+			expect(sessionManager.getCwd()).toBe(tempDir);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("uses the effective runtime cwd for project agent discovery", async () => {
+		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
+		const agentsDir = join(tempDir, ".dreb", "agents");
+		mkdirSync(agentsDir, { recursive: true });
+		writeFileSync(
+			join(agentsDir, "runtime-agent.md"),
+			"---\nname: Runtime Agent\ndescription: Found from effective cwd\n---\n\nRuntime prompt.\n",
+		);
+		(sessionManager as unknown as { cwd: string }).cwd = "/missing/historical/project";
+
+		try {
+			const outputs = await dispatchRpcCommand(session, { id: "runtime-agents", type: "list_agent_types" });
+			expect(outputs[0]).toMatchObject({ id: "runtime-agents", success: true });
+			expect((outputs[0].data as { agentTypes: Array<{ name: string }> }).agentTypes).toContainEqual(
+				expect.objectContaining({ name: "Runtime Agent" }),
+			);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("resolves relative Dream backup paths from the effective runtime cwd", async () => {
+		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
+		(sessionManager as unknown as { cwd: string }).cwd = "/missing/historical/project";
+		const archivePath = join(tempDir, "dream-archives");
+
+		try {
+			const outputs = await dispatchRpcCommand(session, {
+				id: "runtime-dream-backup",
+				type: "dream",
+				args: "backup dream-archives",
+			});
+			expect(outputs[0]).toMatchObject({
+				id: "runtime-dream-backup",
+				success: true,
+				data: { message: `Dream backup path set to: ${archivePath}` },
+			});
+			expect(session.settingsManager.getDreamArchivePath()).toBe(archivePath);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("builds tab-title metadata from the effective runtime cwd", async () => {
+		const { session, sessionManager, tempDir, cleanup } = createTestSession({ inMemory: true });
+		mkdirSync(join(tempDir, ".git"));
+		writeFileSync(join(tempDir, ".git", "HEAD"), "ref: refs/heads/runtime-title\n");
+		(sessionManager as unknown as { cwd: string }).cwd = "/missing/historical/project";
+		capturedTabTitleDeps.length = 0;
+
+		try {
+			await dispatchRpcCommand(session, { id: "runtime-title", type: "get_state" });
+			const deps = capturedTabTitleDeps.at(-1);
+			expect(deps).toBeDefined();
+			expect(deps?.getCwd?.()).toBe(tempDir);
+			expect(deps?.getRepo?.()).toBe(basename(tempDir));
+			expect(deps?.getBranch?.()).toBe("runtime-title");
+		} finally {
+			cleanup();
+		}
+	});
+
 	it.each([
 		{ command: "prompt", method: "prompt" },
 		{ command: "steer", method: "steer" },
