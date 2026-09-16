@@ -1214,9 +1214,10 @@ export class SessionManager {
 	/**
 	 * Create a new session file containing only the path from root to the specified leaf.
 	 * Useful for extracting a single conversation path from a branched session.
+	 * The optional cwd records the effective working directory for the new branch.
 	 * Returns the new session file path, or undefined if not persisting.
 	 */
-	createBranchedSession(leafId: string): string | undefined {
+	createBranchedSession(leafId: string, cwd?: string): string | undefined {
 		const previousSessionFile = this.sessionFile;
 		const path = this.getBranch(leafId);
 		if (path.length === 0) {
@@ -1240,6 +1241,7 @@ export class SessionManager {
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
 		const newSessionFile = join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.jsonl`);
+		this.cwd = cwd ?? this.cwd;
 
 		const header: SessionHeader = {
 			type: "session",

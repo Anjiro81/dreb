@@ -12,9 +12,11 @@
  * via buildSessionContext + replaceMessages.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarnessWithExtensions, type Harness } from "./test-harness.js";
-import { assistantMsg, userMsg } from "./utilities.js";
+import { assistantMsg, createTestSession, userMsg } from "./utilities.js";
 
 describe("AgentSession.fork — any message", () => {
 	let harness: Harness;
@@ -87,6 +89,34 @@ describe("AgentSession.fork — any message", () => {
 		expect(tail.role).toBe("assistant");
 		expect(JSON.stringify(tail)).toContain("a1");
 	});
+
+	it.each(["assistant", "user"] as const)(
+		"records the effective runtime cwd when forking from a non-root %s message after fallback resume",
+		async (role) => {
+			const { session, sessionManager, tempDir, cleanup } = createTestSession();
+			const historicalCwd = join(tempDir, "missing-historical-project");
+			sessionManager.newSession({ cwd: historicalCwd });
+
+			try {
+				sessionManager.appendMessage(userMsg("q1"));
+				const assistantId = sessionManager.appendMessage(assistantMsg("a1"));
+				const userId = sessionManager.appendMessage(userMsg("q2"));
+				sessionManager.appendMessage(assistantMsg("a2"));
+				const sourceFile = sessionManager.getSessionFile()!;
+
+				await session.fork(role === "assistant" ? assistantId : userId);
+
+				const branchFile = sessionManager.getSessionFile()!;
+				const sourceHeader = JSON.parse(readFileSync(sourceFile, "utf8").split("\n")[0]!);
+				const branchHeader = JSON.parse(readFileSync(branchFile, "utf8").split("\n")[0]!);
+				expect(sourceHeader.cwd).toBe(historicalCwd);
+				expect(branchHeader.cwd).toBe(tempDir);
+				expect(sessionManager.getCwd()).toBe(tempDir);
+			} finally {
+				cleanup();
+			}
+		},
+	);
 
 	it("throws for a non-message / invalid entry id", async () => {
 		harness = await createHarnessWithExtensions();

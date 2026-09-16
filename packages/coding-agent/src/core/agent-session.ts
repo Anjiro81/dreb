@@ -3989,7 +3989,7 @@ export class AgentSession {
 				);
 			}
 			const { cancelled } = await this._performFork(entryId, () => {
-				this.sessionManager.createBranchedSession(entryId);
+				this.sessionManager.createBranchedSession(entryId, this.cwd);
 			});
 			return { selectedText: "", cancelled };
 		}
@@ -4003,7 +4003,7 @@ export class AgentSession {
 			if (!selectedEntry.parentId) {
 				this.sessionManager.newSession({ parentSession: previousSessionFile, cwd: this.cwd });
 			} else {
-				this.sessionManager.createBranchedSession(selectedEntry.parentId);
+				this.sessionManager.createBranchedSession(selectedEntry.parentId, this.cwd);
 			}
 		});
 
