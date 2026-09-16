@@ -3410,6 +3410,46 @@ describe("screen smoke tests", () => {
 		expect(el.querySelector("button.send")).toBeNull();
 	});
 
+	it("closed subagent chooser submits the selected cwd and retains failures for retry", async () => {
+		const store = makeStore() as any;
+		const session = populatedSession("closed-subagent-chooser");
+		session.closed = { cwd: "/missing/project", sessionFile: "/sessions/closed-subagent.jsonl" };
+		let attempt = 0;
+		const resumeClosedSession = vi.fn(async () => {
+			attempt++;
+			session.closed!.resumeError = attempt === 1 ? "replacement rejected" : undefined;
+		});
+		const fakeStore = {
+			...store,
+			sessions: { "closed-subagent-chooser": session },
+			fleet: () => ({ runtimes: [], diskSessions: [] }),
+			resumeClosedSession,
+		};
+		const el = mount(() => <SubagentScreen store={fakeStore} sessionKey="closed-subagent-chooser" agentId="bg1" />);
+
+		const choose = [...el.querySelectorAll('[data-banner-key="closed"] button')].find((button) =>
+			button.textContent?.includes("Choose directory"),
+		) as HTMLButtonElement;
+		choose.click();
+		const input = el.querySelector("#resume-runtime-cwd") as HTMLInputElement;
+		input.value = "/replacement/project";
+		input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+		const submit = [...el.querySelectorAll(".modal-actions button")].find(
+			(button) => button.textContent === "resume session",
+		) as HTMLButtonElement;
+
+		submit.click();
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(resumeClosedSession).toHaveBeenLastCalledWith("closed-subagent-chooser", "/replacement/project");
+		expect(el.querySelector(".resume-session-modal")).not.toBeNull();
+		expect(el.querySelector('[role="alert"]')?.textContent).toContain("replacement rejected");
+
+		submit.click();
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(resumeClosedSession).toHaveBeenCalledTimes(2);
+		expect(el.querySelector(".resume-session-modal")).toBeNull();
+	});
+
 	it("subagent drill-in sends unchanged steering text and shows the child queue mode", async () => {
 		const store = makeStore() as any;
 		const session = populatedSession("k-live-steer");
@@ -6819,6 +6859,37 @@ describe("dashboard client regressions", () => {
 		expect(el.querySelector("textarea")).toBeNull();
 		expect(el.querySelector(".session-bar .session-controls")).toBeNull();
 		expect(el.querySelector(".status-line")).toBeNull();
+	});
+
+	it("closed parent-session chooser submits the selected cwd and closes after success", async () => {
+		const store = makeStore() as any;
+		const session = populatedSession("closed-parent-chooser");
+		session.closed = { cwd: "/missing/project", sessionFile: "/sessions/closed-parent.jsonl" };
+		const resumeClosedSession = vi.fn(async () => {});
+		const fakeStore = {
+			...store,
+			sessions: { "closed-parent-chooser": session },
+			fleet: () => ({ runtimes: [], diskSessions: [] }),
+			hydrateSession: async () => {},
+			resumeClosedSession,
+		};
+		const el = mount(() => <SessionScreen store={fakeStore} sessionKey="closed-parent-chooser" />);
+
+		const choose = [...el.querySelectorAll('[data-banner-key="closed"] button')].find((button) =>
+			button.textContent?.includes("Choose directory"),
+		) as HTMLButtonElement;
+		choose.click();
+		const input = el.querySelector("#resume-runtime-cwd") as HTMLInputElement;
+		input.value = "/replacement/project";
+		input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+		const submit = [...el.querySelectorAll(".modal-actions button")].find(
+			(button) => button.textContent === "resume session",
+		) as HTMLButtonElement;
+		submit.click();
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		expect(resumeClosedSession).toHaveBeenCalledWith("closed-parent-chooser", "/replacement/project");
+		expect(el.querySelector(".resume-session-modal")).toBeNull();
 	});
 
 	it("fleet re-resolves the historical cwd when resuming a disk session", async () => {
