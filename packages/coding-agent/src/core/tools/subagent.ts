@@ -1,6 +1,16 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, type Dirent, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
+import {
+	closeSync,
+	type Dirent,
+	existsSync,
+	openSync,
+	readdirSync,
+	readFileSync,
+	readSync,
+	realpathSync,
+	statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import type { AgentTool, ThinkingLevel } from "@dreb/agent-core";
@@ -1769,6 +1779,18 @@ function comparablePath(pathValue: string): string {
 	return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
+/** Canonical identity for an existing path, with a lexical fallback for races/missing paths. */
+function canonicalExistingPath(pathValue: string): string {
+	let canonical: string;
+	try {
+		canonical = realpathSync.native(pathValue);
+	} catch (err) {
+		if (!isExpectedFilesystemError(err)) throw err;
+		canonical = resolve(pathValue);
+	}
+	return process.platform === "win32" ? canonical.toLowerCase() : canonical;
+}
+
 function parentSessionMatches(recordedParentSession: string, parentSessionFile: string): boolean {
 	if (recordedParentSession === parentSessionFile) return true;
 	if (comparablePath(recordedParentSession) === comparablePath(parentSessionFile)) return true;
@@ -1846,11 +1868,11 @@ function parseStartedAt(header: Record<string, unknown>, sessionFile: string): n
 }
 
 function hasRegisteredSession(sessionDir: string, sessionFile: string): boolean {
-	const comparableSessionDir = comparablePath(sessionDir);
-	const comparableSessionFile = comparablePath(sessionFile);
+	const comparableSessionDir = canonicalExistingPath(sessionDir);
+	const comparableSessionFile = canonicalExistingPath(sessionFile);
 	for (const agent of backgroundAgentRegistry.values()) {
-		if (agent.sessionDir && comparablePath(agent.sessionDir) === comparableSessionDir) return true;
-		if (agent.sessionFile && comparablePath(agent.sessionFile) === comparableSessionFile) return true;
+		if (agent.sessionDir && canonicalExistingPath(agent.sessionDir) === comparableSessionDir) return true;
+		if (agent.sessionFile && canonicalExistingPath(agent.sessionFile) === comparableSessionFile) return true;
 	}
 	return false;
 }
@@ -1866,55 +1888,86 @@ function hasRegisteredSession(sessionDir: string, sessionFile: string): boolean 
  */
 export function rehydrateBackgroundAgentsFromDisk(
 	parentSessionFile: string | undefined,
-	subagentSessionsBase = getSubagentSessionsDir(),
+	subagentSessionRoots: string | readonly string[] = getSubagentSessionsDir(),
 ): number {
 	if (!parentSessionFile) return 0;
 
-	let entries: Dirent[];
-	try {
-		entries = readdirSync(subagentSessionsBase, { withFileTypes: true });
-	} catch (err) {
-		if (isExpectedFilesystemError(err)) return 0;
-		throw err;
-	}
-
+	const roots = typeof subagentSessionRoots === "string" ? [subagentSessionRoots] : subagentSessionRoots;
+	const scannedRoots = new Set<string>();
+	const seenSessionDirs = new Set<string>();
+	const seenSessionFiles = new Set<string>();
 	let registered = 0;
-	for (const entry of entries) {
-		if (!entry.isDirectory()) continue;
 
-		const sessionDir = join(subagentSessionsBase, entry.name);
-		const sessionFiles = discoverSessionFiles(sessionDir, entry.name);
-		if (sessionFiles.length === 0) continue;
+	for (const subagentSessionsBase of roots) {
+		const canonicalRoot = canonicalExistingPath(subagentSessionsBase);
+		if (scannedRoots.has(canonicalRoot)) continue;
+		scannedRoots.add(canonicalRoot);
 
-		let sessionFile: string | undefined;
-		let header: Record<string, unknown> | undefined;
-		for (const candidateFile of sessionFiles) {
-			const candidateHeader = parseSessionHeader(candidateFile);
-			if (candidateHeader?.type !== "session" || typeof candidateHeader.parentSession !== "string") continue;
-			if (!parentSessionMatches(candidateHeader.parentSession, parentSessionFile)) continue;
-			sessionFile = candidateFile;
-			header = candidateHeader;
-			break;
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(subagentSessionsBase, { withFileTypes: true });
+		} catch (err) {
+			if (isExpectedFilesystemError(err)) continue;
+			throw err;
 		}
-		if (!sessionFile || !header) continue;
 
-		const agentId = `${REHYDRATED_AGENT_ID_PREFIX}${entry.name}`;
-		if (backgroundAgentRegistry.has(agentId) || hasRegisteredSession(sessionDir, sessionFile)) continue;
+		for (const entry of entries) {
+			const sessionDir = join(subagentSessionsBase, entry.name);
+			let isDirectory = entry.isDirectory();
+			if (!isDirectory && entry.isSymbolicLink()) {
+				try {
+					isDirectory = statSync(sessionDir).isDirectory();
+				} catch (err) {
+					if (isExpectedFilesystemError(err)) continue;
+					throw err;
+				}
+			}
+			if (!isDirectory) continue;
 
-		const statusFile = sessionFiles[sessionFiles.length - 1] ?? sessionFile;
-		const agentType = typeof header.agentType === "string" && header.agentType.trim() ? header.agentType : "agent";
-		const taskSummary = findFirstUserMessageSummary(sessionFile) ?? `${agentType} (${entry.name})`;
-		backgroundAgentRegistry.set(agentId, {
-			agentId,
-			agentType,
-			taskSummary,
-			startedAt: parseStartedAt(header, sessionFile),
-			status: inferCompletedSessionStatus(statusFile),
-			sessionDir,
-			sessionFile,
-			cwd: typeof header.cwd === "string" ? header.cwd : undefined,
-		});
-		registered++;
+			const canonicalSessionDir = canonicalExistingPath(sessionDir);
+			if (seenSessionDirs.has(canonicalSessionDir)) continue;
+			seenSessionDirs.add(canonicalSessionDir);
+
+			const sessionFiles = discoverSessionFiles(sessionDir, entry.name);
+			if (sessionFiles.length === 0) continue;
+
+			let sessionFile: string | undefined;
+			let header: Record<string, unknown> | undefined;
+			for (const candidateFile of sessionFiles) {
+				const candidateHeader = parseSessionHeader(candidateFile);
+				if (candidateHeader?.type !== "session" || typeof candidateHeader.parentSession !== "string") continue;
+				if (!parentSessionMatches(candidateHeader.parentSession, parentSessionFile)) continue;
+				const canonicalSessionFile = canonicalExistingPath(candidateFile);
+				if (seenSessionFiles.has(canonicalSessionFile)) break;
+				seenSessionFiles.add(canonicalSessionFile);
+				sessionFile = candidateFile;
+				header = candidateHeader;
+				break;
+			}
+			if (!sessionFile || !header || hasRegisteredSession(sessionDir, sessionFile)) continue;
+
+			const baseAgentId = `${REHYDRATED_AGENT_ID_PREFIX}${entry.name}`;
+			let agentId = baseAgentId;
+			let suffix = 2;
+			while (backgroundAgentRegistry.has(agentId)) {
+				agentId = `${baseAgentId}-${suffix++}`;
+			}
+
+			const statusFile = sessionFiles[sessionFiles.length - 1] ?? sessionFile;
+			const agentType = typeof header.agentType === "string" && header.agentType.trim() ? header.agentType : "agent";
+			const taskSummary = findFirstUserMessageSummary(sessionFile) ?? `${agentType} (${entry.name})`;
+			backgroundAgentRegistry.set(agentId, {
+				agentId,
+				agentType,
+				taskSummary,
+				startedAt: parseStartedAt(header, sessionFile),
+				status: inferCompletedSessionStatus(statusFile),
+				sessionDir,
+				sessionFile,
+				cwd: typeof header.cwd === "string" ? header.cwd : undefined,
+			});
+			registered++;
+		}
 	}
 
 	return registered;
@@ -1986,6 +2039,8 @@ export function pruneBackgroundAgents(maxAgeMs = 5 * 60 * 1000): void {
 }
 
 export interface SubagentToolOptions {
+	/** Resolved root for new subagent child-session directories. Defaults to the legacy agent root. */
+	subagentSessionsDir?: string;
 	/** Called when a background subagent starts. Used by TUI to show status indicators. */
 	onBackgroundStart?: (agentId: string, agentType: string, taskSummary: string, sessionDir?: string) => void;
 	/** Called when a background subagent completes with its result. `cancelled` is true if the user aborted it. */
@@ -2236,6 +2291,7 @@ export function createSubagentToolDefinition(
 	cwd: string,
 	options?: SubagentToolOptions,
 ): ToolDefinition<typeof subagentSchema, SubagentToolDetails | undefined> {
+	const subagentSessionsBase = options?.subagentSessionsDir ?? getSubagentSessionsDir();
 	const onBackgroundStart = options?.onBackgroundStart;
 	const onBackgroundComplete = options?.onBackgroundComplete;
 	const onBackgroundEvent = options?.onBackgroundEvent;
@@ -2475,7 +2531,6 @@ export function createSubagentToolDefinition(
 				};
 
 				// Helper to launch a single background task
-				const subagentSessionsBase = getSubagentSessionsDir();
 				const launchBackgroundTask = (
 					agentName: string,
 					task: string,
