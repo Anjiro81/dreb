@@ -64,6 +64,16 @@ describe("SessionManager.listAllFromDir", () => {
 		await expect(SessionManager.listAllFromDir(notADirectory)).rejects.toThrow();
 	});
 
+	it("propagates per-entry filesystem failures instead of returning a partial custom inventory", async () => {
+		const root = await createAgentDir();
+		const customDir = join(root, "custom-main-sessions");
+		mkdirSync(customDir, { recursive: true });
+		writeSession(join(customDir, "valid.jsonl"), "valid");
+		mkdirSync(join(customDir, "not-a-file.jsonl"));
+
+		await expect(SessionManager.listAllFromDir(customDir)).rejects.toThrow();
+	});
+
 	it("tracks explicit custom inventory roots without marking defaults or in-memory sessions custom", async () => {
 		const root = await createAgentDir();
 		const customDir = join(root, "flat");

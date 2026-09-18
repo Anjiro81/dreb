@@ -220,6 +220,22 @@ describe("rehydrateBackgroundAgentsFromDisk", () => {
 		expect(getBackgroundAgents().some((agent) => agent.sessionFile === legacy.sessionFile)).toBe(true);
 	});
 
+	test("fails loudly instead of returning a normal legacy-only registry when the configured root is invalid", () => {
+		const invalidConfiguredRoot = join(tempDir, "configured-root-is-a-file");
+		writeFileSync(invalidConfiguredRoot, "not a directory\n");
+		const legacy = writeChildSession(
+			subagentSessionsBase,
+			"legacy-hidden-by-error",
+			parentSessionFile,
+			"legacy task",
+		);
+
+		expect(() =>
+			rehydrateBackgroundAgentsFromDisk(parentSessionFile, [invalidConfiguredRoot, subagentSessionsBase]),
+		).toThrow();
+		expect(getBackgroundAgents().some((agent) => agent.sessionFile === legacy.sessionFile)).toBe(false);
+	});
+
 	test("prefers the configured path spelling and deduplicates symlinked or repeated roots", () => {
 		writeChildSession(subagentSessionsBase, "shared-child", parentSessionFile, "shared task");
 		const configuredAlias = join(tempDir, "configured-alias");

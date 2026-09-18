@@ -692,7 +692,7 @@ interface SessionFileCandidate {
 
 const STEP_SESSION_DIR_RE = /^step-(\d+)$/;
 
-function findNewestJsonlFileInDir(dir: string): SessionFileCandidate | undefined {
+function findNewestJsonlFileInDir(dir: string, throwOnOperationalError = false): SessionFileCandidate | undefined {
 	let best: SessionFileCandidate | undefined;
 	for (const entry of readdirSync(dir, { withFileTypes: true })) {
 		if (!entry.name.endsWith(".jsonl")) continue;
@@ -702,14 +702,17 @@ function findNewestJsonlFileInDir(dir: string): SessionFileCandidate | undefined
 			const mtime = statSync(fullPath).mtime.getTime();
 			if (!best || mtime > best.mtime) best = { path: fullPath, mtime };
 		} catch (err) {
-			if (isExpectedFilesystemError(err)) continue;
+			if (isExpectedFilesystemError(err) && (!throwOnOperationalError || isMissingFilesystemError(err))) continue;
 			throw err;
 		}
 	}
 	return best;
 }
 
-function discoverStepSessionFileCandidates(sessionDir: string): SessionFileCandidate[] {
+function discoverStepSessionFileCandidates(
+	sessionDir: string,
+	throwOnOperationalError = false,
+): SessionFileCandidate[] {
 	const steps: Array<{ name: string; index: number }> = [];
 	for (const entry of readdirSync(sessionDir, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
@@ -722,10 +725,10 @@ function discoverStepSessionFileCandidates(sessionDir: string): SessionFileCandi
 	const files: SessionFileCandidate[] = [];
 	for (const step of steps) {
 		try {
-			const candidate = findNewestJsonlFileInDir(join(sessionDir, step.name));
+			const candidate = findNewestJsonlFileInDir(join(sessionDir, step.name), throwOnOperationalError);
 			if (candidate) files.push(candidate);
 		} catch (err) {
-			if (isExpectedFilesystemError(err)) continue;
+			if (isExpectedFilesystemError(err) && (!throwOnOperationalError || isMissingFilesystemError(err))) continue;
 			throw err;
 		}
 	}
@@ -741,16 +744,21 @@ function discoverStepSessionFileCandidates(sessionDir: string): SessionFileCandi
  * present this recurses one level into step-* directories and returns one file
  * per step in numeric step order.
  */
-export function discoverSessionFiles(sessionDir: string, agentName: string): string[] {
+export function discoverSessionFiles(
+	sessionDir: string,
+	agentName: string,
+	options: { throwOnOperationalError?: boolean } = {},
+): string[] {
+	const throwOnOperationalError = options.throwOnOperationalError ?? false;
 	try {
-		if (!existsSync(sessionDir)) return [];
-		const flatFile = findNewestJsonlFileInDir(sessionDir);
+		if (!throwOnOperationalError && !existsSync(sessionDir)) return [];
+		const flatFile = findNewestJsonlFileInDir(sessionDir, throwOnOperationalError);
 		if (flatFile) {
 			log.debug(`[subagent] session file: ${flatFile.path} (agent=${agentName})`);
 			return [flatFile.path];
 		}
 
-		const stepFiles = discoverStepSessionFileCandidates(sessionDir);
+		const stepFiles = discoverStepSessionFileCandidates(sessionDir, throwOnOperationalError);
 		if (stepFiles.length > 0) {
 			log.debug(
 				`[subagent] chain session files: ${stepFiles.map((file) => file.path).join(", ")} (agent=${agentName})`,
@@ -758,6 +766,10 @@ export function discoverSessionFiles(sessionDir: string, agentName: string): str
 			return stepFiles.map((file) => file.path);
 		}
 	} catch (err) {
+		if (throwOnOperationalError) {
+			if (isMissingFilesystemError(err)) return [];
+			throw err;
+		}
 		if (!isExpectedFilesystemError(err)) throw err;
 		log.warn(
 			`[subagent] failed to discover session file (agent=${agentName}): ${err instanceof Error ? err.message : String(err)}`,
@@ -1675,6 +1687,11 @@ function isExpectedFilesystemError(err: unknown): boolean {
 	return typeof (err as NodeJS.ErrnoException | undefined)?.code === "string";
 }
 
+/** Only absence is optional during configured-root restart recovery. */
+function isMissingFilesystemError(err: unknown): boolean {
+	return (err as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+}
+
 function parseJsonlLine(line: string): Record<string, unknown> | undefined {
 	try {
 		const parsed = JSON.parse(line);
@@ -1709,7 +1726,7 @@ function readFirstNonEmptyLine(filePath: string): string | undefined {
 
 		return buffered.trim() ? buffered : undefined;
 	} catch (err) {
-		if (isExpectedFilesystemError(err)) return undefined;
+		if (isMissingFilesystemError(err)) return undefined;
 		throw err;
 	} finally {
 		if (fd !== undefined) {
@@ -1730,7 +1747,7 @@ function readFileSlice(filePath: string, start: number, length: number): string 
 		const bytesRead = readSync(fd, buffer, 0, length, start);
 		return buffer.toString("utf8", 0, bytesRead);
 	} catch (err) {
-		if (isExpectedFilesystemError(err)) return undefined;
+		if (isMissingFilesystemError(err)) return undefined;
 		throw err;
 	} finally {
 		if (fd !== undefined) {
@@ -1748,7 +1765,7 @@ function readFileStart(filePath: string, maxBytes: number): string | undefined {
 	try {
 		size = Math.min(statSync(filePath).size, maxBytes);
 	} catch (err) {
-		if (isExpectedFilesystemError(err)) return undefined;
+		if (isMissingFilesystemError(err)) return undefined;
 		throw err;
 	}
 	return readFileSlice(filePath, 0, size);
@@ -1762,7 +1779,7 @@ function readFileTail(filePath: string, maxBytes: number): string | undefined {
 		start = Math.max(0, size - maxBytes);
 		length = size - start;
 	} catch (err) {
-		if (isExpectedFilesystemError(err)) return undefined;
+		if (isMissingFilesystemError(err)) return undefined;
 		throw err;
 	}
 	return readFileSlice(filePath, start, length);
@@ -1785,7 +1802,7 @@ function canonicalExistingPath(pathValue: string): string {
 	try {
 		canonical = realpathSync.native(pathValue);
 	} catch (err) {
-		if (!isExpectedFilesystemError(err)) throw err;
+		if (!isMissingFilesystemError(err)) throw err;
 		canonical = resolve(pathValue);
 	}
 	return process.platform === "win32" ? canonical.toLowerCase() : canonical;
@@ -1862,7 +1879,7 @@ function parseStartedAt(header: Record<string, unknown>, sessionFile: string): n
 	try {
 		return statSync(sessionFile).mtime.getTime();
 	} catch (err) {
-		if (isExpectedFilesystemError(err)) return Date.now();
+		if (isMissingFilesystemError(err)) return Date.now();
 		throw err;
 	}
 }
@@ -1907,7 +1924,7 @@ export function rehydrateBackgroundAgentsFromDisk(
 		try {
 			entries = readdirSync(subagentSessionsBase, { withFileTypes: true });
 		} catch (err) {
-			if (isExpectedFilesystemError(err)) continue;
+			if (isMissingFilesystemError(err)) continue;
 			throw err;
 		}
 
@@ -1918,7 +1935,7 @@ export function rehydrateBackgroundAgentsFromDisk(
 				try {
 					isDirectory = statSync(sessionDir).isDirectory();
 				} catch (err) {
-					if (isExpectedFilesystemError(err)) continue;
+					if (isMissingFilesystemError(err)) continue;
 					throw err;
 				}
 			}
@@ -1928,7 +1945,7 @@ export function rehydrateBackgroundAgentsFromDisk(
 			if (seenSessionDirs.has(canonicalSessionDir)) continue;
 			seenSessionDirs.add(canonicalSessionDir);
 
-			const sessionFiles = discoverSessionFiles(sessionDir, entry.name);
+			const sessionFiles = discoverSessionFiles(sessionDir, entry.name, { throwOnOperationalError: true });
 			if (sessionFiles.length === 0) continue;
 
 			let sessionFile: string | undefined;

@@ -569,7 +569,7 @@ function resolveForDeletion(filePath: string): string {
 	return resolve(filePath);
 }
 
-async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
+async function buildSessionInfo(filePath: string, throwOnFilesystemError = false): Promise<SessionInfo | null> {
 	try {
 		const content = await readFile(filePath, "utf8");
 		const entries: FileEntry[] = [];
@@ -635,7 +635,10 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			firstMessage: firstMessage || "(no messages)",
 			allMessagesText: allMessages.join(" "),
 		};
-	} catch {
+	} catch (error) {
+		if (throwOnFilesystemError && typeof (error as NodeJS.ErrnoException | undefined)?.code === "string") {
+			throw error;
+		}
 		/* Corrupt session file — exclude from listing */
 		return null;
 	}
@@ -648,35 +651,40 @@ async function listSessionsFromDir(
 	onProgress?: SessionListProgress,
 	progressOffset = 0,
 	progressTotal?: number,
-	throwOnDirectoryError = false,
+	throwOnFilesystemError = false,
 ): Promise<SessionInfo[]> {
 	const sessions: SessionInfo[] = [];
-	if (!existsSync(dir)) {
+	if (!throwOnFilesystemError && !existsSync(dir)) {
 		return sessions;
 	}
 
+	let dirEntries: string[];
 	try {
-		const dirEntries = await readdir(dir);
-		const files = dirEntries.filter((f) => f.endsWith(".jsonl")).map((f) => join(dir, f));
-		const total = progressTotal ?? files.length;
+		dirEntries = await readdir(dir);
+	} catch (error) {
+		if (throwOnFilesystemError && (error as NodeJS.ErrnoException | undefined)?.code !== "ENOENT") throw error;
+		return sessions;
+	}
 
+	const files = dirEntries.filter((file) => file.endsWith(".jsonl")).map((file) => join(dir, file));
+	const total = progressTotal ?? files.length;
+
+	try {
 		let loaded = 0;
 		const results = await Promise.all(
 			files.map(async (file) => {
-				const info = await buildSessionInfo(file);
+				const info = await buildSessionInfo(file, throwOnFilesystemError);
 				loaded++;
 				onProgress?.(progressOffset + loaded, total);
 				return info;
 			}),
 		);
 		for (const info of results) {
-			if (info) {
-				sessions.push(info);
-			}
+			if (info) sessions.push(info);
 		}
 	} catch (error) {
-		if (throwOnDirectoryError) throw error;
-		/* Session directory read failed — return partial results */
+		if (throwOnFilesystemError) throw error;
+		/* Session file read failed — return partial results */
 	}
 
 	return sessions;

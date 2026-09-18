@@ -381,10 +381,10 @@ for (const line of lines) {
 Key methods for working with sessions programmatically.
 
 ### Static Creation Methods
-- `SessionManager.create(cwd, sessionDir?)` - New session
+- `SessionManager.create(cwd, sessionDir?, options?)` - New session; `options.customSessionInventory: false` keeps an explicitly supplied built-in directory from being treated as a flat custom inventory root
 - `SessionManager.open(path, sessionDir?)` - Open existing session file
 - `SessionManager.continueRecent(cwd, sessionDir?)` - Continue most recent or create new
-- `SessionManager.inMemory(cwd?)` - No file persistence
+- `SessionManager.inMemory(cwd?, customSessionInventoryRoot?)` - No active-session file persistence; the optional flat root remains available to inventory commands
 - `SessionManager.forkFrom(sourcePath, targetCwd, sessionDir?)` - Fork session from another project
 
 ### Static Listing Methods
@@ -392,7 +392,7 @@ Key methods for working with sessions programmatically.
 - `SessionManager.listAllFromDir(dir, onProgress?)` - List a flat custom main-session directory
 - `SessionManager.listAll(onProgress?)` - List the built-in nested store across all projects
 
-`getCustomSessionInventoryRoot()` returns the explicit flat root carried by a custom manager, or `undefined` for built-in/default and in-memory managers. RPC uses this distinction so `list_all_sessions` does not accidentally narrow default inventory to one project's directory.
+`getCustomSessionInventoryRoot()` returns the explicit flat root carried by a custom manager, including an in-memory manager created with `customSessionInventoryRoot`. It returns `undefined` for built-in/default managers and in-memory managers without that argument. RPC uses this distinction so `list_all_sessions` does not accidentally narrow default inventory to one project's directory.
 
 ### Instance Methods - Session Management
 - `newSession(options?)` - Start a new session (options: `{ parentSession?: string, cwd?: string }`)
