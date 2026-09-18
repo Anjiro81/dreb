@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { log } from "../src/core/logger.js";
 import {
 	discoverSessionFile,
 	getBackgroundAgents,
@@ -69,6 +70,7 @@ describe("rehydrateBackgroundAgentsFromDisk", () => {
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		pruneBackgroundAgents(0);
 		if (existsSync(tempDir)) {
 			rmSync(tempDir, { recursive: true, force: true });
@@ -234,6 +236,40 @@ describe("rehydrateBackgroundAgentsFromDisk", () => {
 			rehydrateBackgroundAgentsFromDisk(parentSessionFile, [invalidConfiguredRoot, subagentSessionsBase]),
 		).toThrow();
 		expect(getBackgroundAgents().some((agent) => agent.sessionFile === legacy.sessionFile)).toBe(false);
+	});
+
+	test("warns and skips an invalid compatibility root after recovering the configured root", () => {
+		const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+		const configuredRoot = join(tempDir, "configured-subagents");
+		mkdirSync(configuredRoot, { recursive: true });
+		const configured = writeChildSession(configuredRoot, "configured-child", parentSessionFile, "configured task");
+		rmSync(subagentSessionsBase, { recursive: true, force: true });
+		writeFileSync(subagentSessionsBase, "not a directory\n");
+
+		expect(rehydrateBackgroundAgentsFromDisk(parentSessionFile, [configuredRoot, subagentSessionsBase])).toBe(1);
+		expect(getBackgroundAgents().some((agent) => agent.sessionFile === configured.sessionFile)).toBe(true);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining("skipped compatibility-root recovery"));
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining(subagentSessionsBase));
+	});
+
+	test("warns and skips broken compatibility entries while recovering valid siblings", () => {
+		const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+		const configuredRoot = join(tempDir, "configured-subagents");
+		mkdirSync(configuredRoot, { recursive: true });
+		const brokenChildDir = join(subagentSessionsBase, "broken-child");
+		symlinkSync("broken-child", brokenChildDir, "dir");
+		const legacy = writeChildSession(subagentSessionsBase, "legacy-child", parentSessionFile, "legacy task");
+
+		expect(rehydrateBackgroundAgentsFromDisk(parentSessionFile, [configuredRoot, subagentSessionsBase])).toBe(1);
+		expect(getBackgroundAgents().some((agent) => agent.sessionFile === legacy.sessionFile)).toBe(true);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining(`entry ${brokenChildDir}`));
+	});
+
+	test("propagates operational failures from entries in the primary root", () => {
+		const brokenChildDir = join(subagentSessionsBase, "broken-primary-child");
+		symlinkSync("broken-primary-child", brokenChildDir, "dir");
+
+		expect(() => rehydrateBackgroundAgentsFromDisk(parentSessionFile, subagentSessionsBase)).toThrow();
 	});
 
 	test("prefers the configured path spelling and deduplicates symlinked or repeated roots", () => {

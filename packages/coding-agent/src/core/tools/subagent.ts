@@ -1687,9 +1687,18 @@ function isExpectedFilesystemError(err: unknown): boolean {
 	return typeof (err as NodeJS.ErrnoException | undefined)?.code === "string";
 }
 
-/** Only absence is optional during configured-root restart recovery. */
+/** Only absence is optional during primary-root restart recovery. */
 function isMissingFilesystemError(err: unknown): boolean {
 	return (err as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+}
+
+function shouldSkipRehydrationFilesystemError(err: unknown, isPrimaryRoot: boolean, context: string): boolean {
+	if (isMissingFilesystemError(err)) return true;
+	if (isPrimaryRoot || !isExpectedFilesystemError(err)) return false;
+	log.warn(
+		`[subagent] skipped compatibility-root recovery (${context}): ${err instanceof Error ? err.message : String(err)}`,
+	);
+	return true;
 }
 
 function parseJsonlLine(line: string): Record<string, unknown> | undefined {
@@ -1895,13 +1904,15 @@ function hasRegisteredSession(sessionDir: string, sessionFile: string): boolean 
 }
 
 /**
- * Best-effort recovery for completed background subagents after a dashboard/RPC
- * process resumes an existing parent session. Live background-agent state is an
- * in-memory registry, while child sessions are durable JSONL files under the
- * subagent sessions directory.
+ * Recover completed background subagents after a dashboard/RPC process resumes
+ * an existing parent session. Live background-agent state is an in-memory
+ * registry, while child sessions are durable JSONL files under the subagent
+ * sessions directory.
  *
- * Returns the number of newly registered agents. Expected filesystem and JSONL
- * parse failures are skipped; unexpected programming errors are allowed to throw.
+ * The first root is authoritative: absence races and malformed JSON are skipped,
+ * while operational filesystem failures throw. Later roots are compatibility
+ * stores, so their operational filesystem failures are warned and skipped.
+ * Returns the number of newly registered agents.
  */
 export function rehydrateBackgroundAgentsFromDisk(
 	parentSessionFile: string | undefined,
@@ -1915,8 +1926,15 @@ export function rehydrateBackgroundAgentsFromDisk(
 	const seenSessionFiles = new Set<string>();
 	let registered = 0;
 
-	for (const subagentSessionsBase of roots) {
-		const canonicalRoot = canonicalExistingPath(subagentSessionsBase);
+	for (const [rootIndex, subagentSessionsBase] of roots.entries()) {
+		const isPrimaryRoot = rootIndex === 0;
+		let canonicalRoot: string;
+		try {
+			canonicalRoot = canonicalExistingPath(subagentSessionsBase);
+		} catch (err) {
+			if (shouldSkipRehydrationFilesystemError(err, isPrimaryRoot, `root ${subagentSessionsBase}`)) continue;
+			throw err;
+		}
 		if (scannedRoots.has(canonicalRoot)) continue;
 		scannedRoots.add(canonicalRoot);
 
@@ -1924,66 +1942,67 @@ export function rehydrateBackgroundAgentsFromDisk(
 		try {
 			entries = readdirSync(subagentSessionsBase, { withFileTypes: true });
 		} catch (err) {
-			if (isMissingFilesystemError(err)) continue;
+			if (shouldSkipRehydrationFilesystemError(err, isPrimaryRoot, `root ${subagentSessionsBase}`)) continue;
 			throw err;
 		}
 
 		for (const entry of entries) {
 			const sessionDir = join(subagentSessionsBase, entry.name);
-			let isDirectory = entry.isDirectory();
-			if (!isDirectory && entry.isSymbolicLink()) {
-				try {
+			try {
+				let isDirectory = entry.isDirectory();
+				if (!isDirectory && entry.isSymbolicLink()) {
 					isDirectory = statSync(sessionDir).isDirectory();
-				} catch (err) {
-					if (isMissingFilesystemError(err)) continue;
-					throw err;
 				}
+				if (!isDirectory) continue;
+
+				const canonicalSessionDir = canonicalExistingPath(sessionDir);
+				if (seenSessionDirs.has(canonicalSessionDir)) continue;
+				seenSessionDirs.add(canonicalSessionDir);
+
+				const sessionFiles = discoverSessionFiles(sessionDir, entry.name, { throwOnOperationalError: true });
+				if (sessionFiles.length === 0) continue;
+
+				let sessionFile: string | undefined;
+				let header: Record<string, unknown> | undefined;
+				for (const candidateFile of sessionFiles) {
+					const candidateHeader = parseSessionHeader(candidateFile);
+					if (candidateHeader?.type !== "session" || typeof candidateHeader.parentSession !== "string") continue;
+					if (!parentSessionMatches(candidateHeader.parentSession, parentSessionFile)) continue;
+					const canonicalSessionFile = canonicalExistingPath(candidateFile);
+					if (seenSessionFiles.has(canonicalSessionFile)) break;
+					seenSessionFiles.add(canonicalSessionFile);
+					sessionFile = candidateFile;
+					header = candidateHeader;
+					break;
+				}
+				if (!sessionFile || !header || hasRegisteredSession(sessionDir, sessionFile)) continue;
+
+				const baseAgentId = `${REHYDRATED_AGENT_ID_PREFIX}${entry.name}`;
+				let agentId = baseAgentId;
+				let suffix = 2;
+				while (backgroundAgentRegistry.has(agentId)) {
+					agentId = `${baseAgentId}-${suffix++}`;
+				}
+
+				const statusFile = sessionFiles[sessionFiles.length - 1] ?? sessionFile;
+				const agentType =
+					typeof header.agentType === "string" && header.agentType.trim() ? header.agentType : "agent";
+				const taskSummary = findFirstUserMessageSummary(sessionFile) ?? `${agentType} (${entry.name})`;
+				backgroundAgentRegistry.set(agentId, {
+					agentId,
+					agentType,
+					taskSummary,
+					startedAt: parseStartedAt(header, sessionFile),
+					status: inferCompletedSessionStatus(statusFile),
+					sessionDir,
+					sessionFile,
+					cwd: typeof header.cwd === "string" ? header.cwd : undefined,
+				});
+				registered++;
+			} catch (err) {
+				if (shouldSkipRehydrationFilesystemError(err, isPrimaryRoot, `entry ${sessionDir}`)) continue;
+				throw err;
 			}
-			if (!isDirectory) continue;
-
-			const canonicalSessionDir = canonicalExistingPath(sessionDir);
-			if (seenSessionDirs.has(canonicalSessionDir)) continue;
-			seenSessionDirs.add(canonicalSessionDir);
-
-			const sessionFiles = discoverSessionFiles(sessionDir, entry.name, { throwOnOperationalError: true });
-			if (sessionFiles.length === 0) continue;
-
-			let sessionFile: string | undefined;
-			let header: Record<string, unknown> | undefined;
-			for (const candidateFile of sessionFiles) {
-				const candidateHeader = parseSessionHeader(candidateFile);
-				if (candidateHeader?.type !== "session" || typeof candidateHeader.parentSession !== "string") continue;
-				if (!parentSessionMatches(candidateHeader.parentSession, parentSessionFile)) continue;
-				const canonicalSessionFile = canonicalExistingPath(candidateFile);
-				if (seenSessionFiles.has(canonicalSessionFile)) break;
-				seenSessionFiles.add(canonicalSessionFile);
-				sessionFile = candidateFile;
-				header = candidateHeader;
-				break;
-			}
-			if (!sessionFile || !header || hasRegisteredSession(sessionDir, sessionFile)) continue;
-
-			const baseAgentId = `${REHYDRATED_AGENT_ID_PREFIX}${entry.name}`;
-			let agentId = baseAgentId;
-			let suffix = 2;
-			while (backgroundAgentRegistry.has(agentId)) {
-				agentId = `${baseAgentId}-${suffix++}`;
-			}
-
-			const statusFile = sessionFiles[sessionFiles.length - 1] ?? sessionFile;
-			const agentType = typeof header.agentType === "string" && header.agentType.trim() ? header.agentType : "agent";
-			const taskSummary = findFirstUserMessageSummary(sessionFile) ?? `${agentType} (${entry.name})`;
-			backgroundAgentRegistry.set(agentId, {
-				agentId,
-				agentType,
-				taskSummary,
-				startedAt: parseStartedAt(header, sessionFile),
-				status: inferCompletedSessionStatus(statusFile),
-				sessionDir,
-				sessionFile,
-				cwd: typeof header.cwd === "string" ? header.cwd : undefined,
-			});
-			registered++;
 		}
 	}
 

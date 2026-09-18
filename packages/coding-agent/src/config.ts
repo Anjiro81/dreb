@@ -241,7 +241,10 @@ export function resolveConfiguredDirectory(configuredDir: string | undefined, ba
 	if (!value) return undefined;
 	if (isAbsolute(value)) return value;
 	if (value === "~") return homedir();
-	if (value.startsWith("~/")) return resolve(homedir(), value.slice(2));
+	if (/^~[\\/]/.test(value)) {
+		const homeRelativePath = value.slice(1).replace(/^[\\/]+/, "");
+		return homeRelativePath ? join(homedir(), homeRelativePath) : homedir();
+	}
 	return resolve(baseCwd, value);
 }
 

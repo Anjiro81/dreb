@@ -87,6 +87,8 @@ describe("resolveConfiguredDirectory", () => {
 
 	it("expands tilde paths from the home directory", () => {
 		expect(resolveConfiguredDirectory("~/session-logs", "/unused/base")).toBe(join(homedir(), "session-logs"));
+		expect(resolveConfiguredDirectory("~//session-logs", "/unused/base")).toBe(join(homedir(), "session-logs"));
+		expect(resolveConfiguredDirectory("~\\session-logs", "/unused/base")).toBe(join(homedir(), "session-logs"));
 		expect(resolveConfiguredDirectory("~", "/unused/base")).toBe(homedir());
 	});
 
