@@ -97,10 +97,12 @@ Absolute paths remain absolute, `~` expands from the home directory, and a relat
   transcript image display mode, and notification permission), an appearance section with a curated-theme gallery
   (entropist.ca / Dim / Solarized / Gruvbox / Caves of Qud / Van Gogh /
   Okabe-Ito / Paul Tol — the last two colorblind-safe — live preview cards,
-  system/light/dark mode selector, and Theme default / IBM Plex Mono /
-  JetBrains Mono / Fira Code / Iosevka / OpenDyslexic / Atkinson Hyperlegible
-  font selector, saved per browser), current pairing code,
-  the 1–3650 day lifetime used by future pairings (180 days by default), and
+  system/light/dark mode selector, and a font picker with 36 explicit choices
+  plus Theme default: the existing IBM Plex Mono / JetBrains Mono / Fira Code /
+  Iosevka / OpenDyslexic / Atkinson Hyperlegible plus 15 sans-serif and 15 serif
+  families, with regular-face previews in the open listbox, saved per browser),
+  current pairing code, the 1–3650 day lifetime used by future pairings
+  (180 days by default), and
   paired-device expiry/unpair management.
 - **Pairing** — remote first-login rotating-code flow.
 
@@ -431,14 +433,40 @@ Browser (SolidJS, hash-routed SPA)
   entropist.ca + system + Theme default install leaves no keys and matches the
   `tokens.css` baseline exactly). Theme default keeps each theme's built-in
   family: most use Google-hosted IBM Plex Mono, while Gruvbox uses the bundled
-  self-hosted JetBrains Mono (OFL, in `src/client/assets/fonts/`). An explicit
-  IBM Plex Mono, JetBrains Mono, Fira Code, Iosevka, OpenDyslexic, or Atkinson
-  Hyperlegible selection overrides any theme and is reflected in previews. The
-  self-hosted families — JetBrains Mono, Fira Code, Iosevka, the bundled
-  dyslexia-friendly OpenDyslexic, and the low-vision-friendly Atkinson
-  Hyperlegible (all OFL, same directory) — are
-  lazy-loaded only when active typography uses them. No `light-dark()` (iOS
-  Safari 16.4 floor); a synchronous `index.html` bootstrap
+  self-hosted JetBrains Mono (OFL, in `src/client/assets/fonts/`). The font picker
+  preserves those six explicit choices, including dyslexia-friendly OpenDyslexic
+  and low-vision-friendly Atkinson Hyperlegible, and adds 15 sans-serif and
+  15 serif families: 36 explicit choices plus Theme default. Explicit choices
+  override any theme and are reflected in theme-card previews. Theme cards keep
+  IBM Plex Mono for Theme default previews; the font picker's Theme default
+  option instead previews the active theme's built-in family, even with an
+  explicit override selected.
+  Visible options preview their own regular face only in the open listbox. When
+  closed, only selected typography uses self-hosted fonts. As rows approach
+  the scroll window, their regular preview faces load; unvisited rows and unused
+  bold/italic faces stay lazy. Browsers without IntersectionObserver preview the
+  complete open list. All 30 additions include real 400/700 normal and italic
+  styles, never synthetic substitutes for those core styles. Arrow keys, Home/End, and typeahead navigate; Enter/Space commits,
+  Escape cancels, and Tab closes without changing the choice.
+  The additions are source-attributed Latin subsets with neutral internal names
+  (all OFL-licensed); see
+  [`expanded/PROVENANCE.md`](src/client/assets/fonts/expanded/PROVENANCE.md).
+  Existing Google-hosted IBM Plex Mono is unchanged. No font uploads or new
+  multilingual bundles are added; missing scripts use browser fallback.
+  New font source assets add 5,457,532 B to the existing 1,395,464 B, for
+  6,852,996 B combined; this is the source-asset total, not a startup download.
+  Scrolling through all additions uses 2,350,576 B of regular preview resources.
+  A cold desktop fixture opened in about 19 ms and requested 109,412 B of new
+  fonts (plus five existing regular faces); closed startup requested no added
+  fonts, and reopening reused loaded faces. These local measurements are not
+  guarantees for every device/network. Thirty-seven choices are small DOM work;
+  network payload is the main tradeoff, bounded by viewport-lazy previews.
+  Against the same-toolchain baseline, the production bundle adds 2,464 B gzipped
+  JavaScript and 1,869 B gzipped CSS (4,333 B total). The open picker adds only
+  118 elements; a 4× CPU / 150 ms latency / 1.6 Mbit/s browser check remains
+  interactive before fonts finish downloading.
+  Legal records are packaged without duplicating source WOFF2 binaries.
+  No `light-dark()` (iOS Safari 16.4 floor); a synchronous `index.html` bootstrap
   prevents a wrong-appearance flash. The static
   `manifest.webmanifest` keeps white (default-light) launch colors as the
   fallback, while the live `theme-color` meta follows the active appearance.
