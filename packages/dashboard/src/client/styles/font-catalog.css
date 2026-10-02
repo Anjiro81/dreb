@@ -485,7 +485,7 @@
 }
 
 @font-face {
-  font-family: 'Dreb Serif 07';
+  font-family: 'Dreb Text 07';
   src: url('../assets/fonts/expanded/latin-serif-07-normal-400.woff2') format('woff2');
   font-style: normal;
   font-weight: 400;
@@ -493,7 +493,7 @@
 }
 
 @font-face {
-  font-family: 'Dreb Serif 07';
+  font-family: 'Dreb Text 07';
   src: url('../assets/fonts/expanded/latin-serif-07-normal-700.woff2') format('woff2');
   font-style: normal;
   font-weight: 700;
@@ -501,7 +501,7 @@
 }
 
 @font-face {
-  font-family: 'Dreb Serif 07';
+  font-family: 'Dreb Text 07';
   src: url('../assets/fonts/expanded/latin-serif-07-italic-400.woff2') format('woff2');
   font-style: italic;
   font-weight: 400;
@@ -509,7 +509,7 @@
 }
 
 @font-face {
-  font-family: 'Dreb Serif 07';
+  font-family: 'Dreb Text 07';
   src: url('../assets/fonts/expanded/latin-serif-07-italic-700.woff2') format('woff2');
   font-style: italic;
   font-weight: 700;
@@ -517,7 +517,7 @@
 }
 
 [data-font='pt-serif'] {
-  --mono-font: 'Dreb Serif 07', 'IBM Plex Mono', 'Courier New', monospace;
+  --mono-font: 'Dreb Text 07', 'IBM Plex Mono', 'Courier New', monospace;
 }
 
 @font-face {

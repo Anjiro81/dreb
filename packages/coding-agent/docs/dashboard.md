@@ -630,6 +630,12 @@ TUI theme system** — dashboard themes intentionally do not map to TUI themes.
   combobox supports Arrow Up/Down, Home/End, and typeahead to highlight options
   without changing the saved choice; Enter/Space opens or commits, Escape
   closes without committing, and Tab closes and moves focus without committing.
+  Opening explicitly focuses the trigger. Background scrolling dismisses the
+  menu when its trigger leaves the viewport; internal catalog scrolling does not.
+  RFN-restricted additions have neutral primary option/trigger names and separate
+  “Based on …” descriptions naming the source (for example, Dreb Sans 07 / Based
+  on Lato). Typeahead also searches source families, and preference IDs are
+  unchanged. PT Serif uses Dreb Text 07 to avoid the reserved individual word Serif.
 - **Per-browser persistence.** Selections are stored in per-browser
   `localStorage` (`dreb.dashboard.theme`, `dreb.dashboard.colorMode`, and
   `dreb.dashboard.font`), with a cross-tab sync listener; a pristine install
@@ -654,15 +660,15 @@ TUI theme system** — dashboard themes intentionally do not map to TUI themes.
   family has real regular, italic, bold, and bold-italic (400/700) support. Theme cards never introduce an alternate family beyond
   the explicit selection. No font uploads or new multilingual bundles are
   added; missing scripts use browser fallback.
-  New font source assets add **5,457,532 B** to the existing **1,395,464 B**, for
-  **6,852,996 B** combined. This source-asset total is not a startup download;
-  all new regular previews total **2,350,576 B**, downloaded progressively as
-  the list is explored. A local cold desktop fixture opened in about **19 ms**
+  New font source assets add **5,457,304 B** to the existing **1,395,464 B**, for
+  **6,852,768 B** combined. This source-asset total is not a startup download;
+  all new regular previews total **2,350,548 B**, downloaded progressively as
+  the list is explored. A local cold desktop fixture opened in about **14 ms**
   and requested **109,412 B** of new fonts; closed startup requested none and
   reopening reused loaded resources. Network/device speeds vary; the font
-  count is inexpensive DOM work (118 additional elements), while downloads
+  count is inexpensive DOM work (136 additional elements), while downloads
   remain the main tradeoff. The same-toolchain production comparison adds
-  **4,333 B gzipped** across JavaScript and CSS; selected styles are fetched
+  **4,676 B gzipped** across JavaScript and CSS; selected styles are fetched
   on demand, and legal packaging does not duplicate source font binaries.
   No `light-dark()` is used, keeping an iOS Safari 16.4 floor.
 - **PWA launch colors.** The static `manifest.webmanifest` keeps white

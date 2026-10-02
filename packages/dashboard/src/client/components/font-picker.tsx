@@ -5,10 +5,12 @@ import { FONT_GROUPS, FONTS, type FontId, font, fontGroup, fontStack, setFont, t
 export function FontPicker(): JSX.Element {
 	const uid = createUniqueId();
 	const listId = `font-list-${uid}`;
+	const selectedSourceId = `font-selected-source-${uid}`;
 	const optionId = (id: FontId) => `${listId}-${id}`;
 	const [open, setOpen] = createSignal(false);
 	const [active, setActive] = createSignal(0);
-	const [position, setPosition] = createSignal<JSX.CSSProperties>({});
+	// Stay out of document flow even before the first positioning calculation.
+	const [position, setPosition] = createSignal<JSX.CSSProperties>({ position: "fixed" });
 	const options = new Map<FontId, HTMLButtonElement>();
 	const [previewed, setPreviewed] = createSignal<ReadonlySet<FontId>>(new Set());
 	const canObserve = typeof IntersectionObserver !== "undefined";
@@ -26,6 +28,11 @@ export function FontPicker(): JSX.Element {
 	const positionPopup = () => {
 		if (!open()) return;
 		const rect = trigger.getBoundingClientRect();
+		// Background page scrolling must not leave an expanded menu offscreen.
+		if (rect.bottom < 0 || rect.top >= window.innerHeight) {
+			close();
+			return;
+		}
 		const width = Math.min(360, Math.max(0, window.innerWidth - 16));
 		const below = Math.max(0, window.innerHeight - rect.bottom - 12);
 		const above = Math.max(0, rect.top - 12);
@@ -40,6 +47,8 @@ export function FontPicker(): JSX.Element {
 		});
 	};
 	const reveal = (index = FONTS.findIndex((entry) => entry.id === font())) => {
+		// Safari does not focus buttons on pointer activation by default.
+		trigger.focus({ preventScroll: true });
 		setActive(index);
 		setOpen(true);
 		positionPopup();
@@ -136,7 +145,8 @@ export function FontPicker(): JSX.Element {
 		const start = cycle ? active() + 1 : active();
 		for (let offset = 0; offset < FONTS.length; offset++) {
 			const index = (start + offset) % FONTS.length;
-			if (FONTS[index].label.toLowerCase().startsWith(query)) {
+			const entry = FONTS[index];
+			if (entry.label.toLowerCase().startsWith(query) || entry.sourceLabel?.toLowerCase().startsWith(query)) {
 				setActive(index);
 				break;
 			}
@@ -176,6 +186,7 @@ export function FontPicker(): JSX.Element {
 				id="pref-font"
 				role="combobox"
 				aria-label="font"
+				aria-describedby={selected().sourceLabel ? selectedSourceId : undefined}
 				aria-haspopup="listbox"
 				aria-expanded={open()}
 				aria-controls={open() ? listId : undefined}
@@ -189,7 +200,14 @@ export function FontPicker(): JSX.Element {
 					else reveal();
 				}}
 			>
-				<span>{selected().label}</span>
+				<span class="font-picker-text">
+					<span class="font-picker-name">{selected().label}</span>
+					<Show when={selected().sourceLabel}>
+						<span class="font-picker-source" id={selectedSourceId}>
+							Based on {selected().sourceLabel}
+						</span>
+					</Show>
+				</span>
 				<span aria-hidden="true">▾</span>
 			</button>
 			<Show when={open()}>
@@ -217,6 +235,8 @@ export function FontPicker(): JSX.Element {
 											id={optionId(entry.id)}
 											data-font-option={entry.id}
 											aria-selected={font() === entry.id}
+											aria-label={entry.label}
+											aria-describedby={entry.sourceLabel ? `${optionId(entry.id)}-source` : undefined}
 											class="font-picker-option"
 											classList={{ highlighted: FONTS[active()].id === entry.id }}
 											style={{
@@ -231,7 +251,17 @@ export function FontPicker(): JSX.Element {
 											}
 											onClick={() => commit(entry.id)}
 										>
-											<span>{entry.label}</span>
+											<Show
+												when={entry.sourceLabel}
+												fallback={<span class="font-picker-name">{entry.label}</span>}
+											>
+												<span class="font-picker-text">
+													<span class="font-picker-name">{entry.label}</span>
+													<span class="font-picker-source" id={`${optionId(entry.id)}-source`}>
+														Based on {entry.sourceLabel}
+													</span>
+												</span>
+											</Show>
 											<span aria-hidden="true">{font() === entry.id ? "✓" : ""}</span>
 										</button>
 									)}

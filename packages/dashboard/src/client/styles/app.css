@@ -3598,10 +3598,21 @@ details.thinking .thinking-body {
 	font-size: var(--fs-secondary);
 }
 
-.font-picker-trigger > span:first-child {
+.font-picker-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.font-picker-name,
+.font-picker-source {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.font-picker-source {
+	font-size: var(--fs-small);
+	font-weight: 400;
+	color: var(--muted);
 }
 
 .font-picker-list {

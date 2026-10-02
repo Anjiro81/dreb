@@ -5655,7 +5655,7 @@ describe("dashboard client regressions", () => {
 			const options = Array.from(popup.querySelectorAll('[role="option"][data-font-option]'));
 			expect(options).toHaveLength(37);
 			expect(
-				options.map((option) => [option.getAttribute("data-font-option"), option.firstElementChild?.textContent]),
+				options.map((option) => [option.getAttribute("data-font-option"), option.getAttribute("aria-label")]),
 			).toEqual(FONTS.map(({ id, label }) => [id, label]));
 			expect(el.querySelectorAll("[data-theme-card]").length).toBe(8);
 			expect(el.querySelector('[data-theme-card="default"]')).not.toBeNull();

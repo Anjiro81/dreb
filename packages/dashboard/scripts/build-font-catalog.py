@@ -78,8 +78,11 @@ def families():
         for index, label in enumerate(labels, 1):
             slug = re.sub(r"(?<=[a-zA-Z])(?=4)", "-", label.lower()).replace(" ", "-")
             folder = "ofl/" + label.lower().replace(" ", "")
+            # PT Serif's RFNs include the word Serif; keep derivative names free
+            # of every reserved word, not only the complete upstream family.
+            derivative_kind = "Text" if label == "PT Serif" else kind
             yield {"id": slug, "label": label, "group": group,
-                   "family": f"Dreb {kind} {index:02}",
+                   "family": f"Dreb {derivative_kind} {index:02}",
                    "stem": f"latin-{kind.lower()}-{index:02}", "folder": folder}
 
 
@@ -417,7 +420,7 @@ def provenance(catalog, details, source_lock, selection):
              f"Approved selection: 15 sans-serif followed by 15 serif families, in catalog order, based on Google Fonts metadata on {SELECTION_DATE}.",
              f"Popularity source: {POPULARITY_URL}; `selection-metadata.json` preserves the selected upstream records and the full response SHA-256 `{selection['responseSha256']}`.",
              "This is a build-time snapshot, not a runtime fetch; the settled order is not asserted to be a strict global popularity ranking.",
-             "Original family labels identify the source of each derivative; they are not derivative font identifiers and imply no endorsement.", "",
+             "Original family labels in this source manifest identify upstream designs and imply no endorsement. RFN-restricted derivatives use their neutral family as the primary Dashboard menu/trigger name, with the original family only in a clearly secondary Based on source description. Typeahead may search that source attribution without changing the derivative identity.", "",
              "## Reproduction and verification", "", "```sh",
              "python3 -m venv /tmp/dreb-fonts-venv",
              "/tmp/dreb-fonts-venv/bin/pip install fonttools==4.63.0 brotli==1.2.0",
@@ -431,7 +434,7 @@ def provenance(catalog, details, source_lock, selection):
              "Rejected Oswald and Roboto Slab lack italic faces; Instrument Serif and DM Serif Display lack bold faces. The settled roster replaces them with Rubik (snapshot popularity rank 29), Crimson Text (133), Arvo (143) and Bodoni Moda (156). The approved 15+15 order is preserved, rather than re-sorting against changing live metadata.",
              "All layout features, surviving glyph outlines (including .notdef) and hints are retained; variable instancing evaluates the upstream outlines at upstream default non-weight axes. No letterforms were redesigned. Both variable normal and variable italic retain exactly wght 400–700 (default clamped into that range); all other axes freeze at actual upstream TTF defaults, not registry defaults. Static normal includes 400, 700 and any available 500/600; static italic includes only 400 and 700. Browsers can fetch one normal variable face for regular 400 where available; extra static and italic faces remain lazy @font-face resources.",
              "The evaluated upstream instance is materialized in TrueType integer coordinates before subsetting. Every surviving glyph's coordinates, contour endpoints, on/off-curve flags and hint bytecode are checked unchanged after WOFF2 encoding. For fontTools 4.63.0's instancer/subsetter mismatch, missing empty gvar entries are restored before subsetting (no outline or delta changes). Source files with post format 3 use glyph indices for this comparison because synthetic glyph names can change on reload.",
-             "All derivative name IDs 1/2/3/4/6/16/17/25 (also 18/20/21/22), custom variation/STAT names, instance names and instance PostScript names are rewritten to neutral Dreb Sans/Serif 01–15 families and matching neutral PostScript identifiers. Localized upstream identities are removed. Copyright, trademark and license notice name IDs 0/7/13/14 are retained unchanged. Source timestamps are preserved with recalculation disabled. WOFF2 encoding uses the pinned Brotli version.",
+             "All derivative name IDs 1/2/3/4/6/16/17/25 (also 18/20/21/22), custom variation/STAT names, instance names and instance PostScript names are rewritten to neutral Dreb Sans/Serif 01–15 families (PT Serif instead uses Dreb Text 07 to avoid the reserved word Serif) and matching neutral PostScript identifiers. Localized upstream identities are removed. Copyright, trademark and license notice name IDs 0/7/13/14 are retained unchanged. Source timestamps are preserved with recalculation disabled. WOFF2 encoding uses the pinned Brotli version.",
              "`catalog.json` coverage is the exact verified intersection of cmap codepoints across a family's faces; per-face actual ranges below preserve any differences. Coverage ranges do not promise every requested codepoint. Missing codepoints resolve through `'IBM Plex Mono', 'Courier New', monospace` and then browser fallback; no glyphs or faces are fabricated.", "",
              "## Licenses and caveats", "",
              "All 30 families use SIL OFL 1.1, checked from their actual pinned upstream OFL.txt contents; each verbatim OFL is bundled in `licenses/<id>/OFL.txt`. These modified subsets use neutral names even where an upstream Reserved Font Name exists. Notices retain original attribution, as required; RFNs and Google Sans trademarks are not used as derivative font identifiers. OFL derivatives remain OFL and may not be sold by themselves.",

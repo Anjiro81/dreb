@@ -30,8 +30,10 @@ export interface ThemeEntry {
 export interface FontEntry {
 	/** Stable id used for the `data-font` attribute and storage. */
 	id: FontId;
-	/** Human label for pickers. */
+	/** Primary user-facing name; restricted derivatives use their neutral name. */
 	label: string;
+	/** Optional upstream attribution, never the derivative's primary name. */
+	sourceLabel?: string;
 }
 
 export type ThemeId = "default" | "dim" | "solarized" | "gruvbox" | "qud" | "vangogh" | "okabe" | "tol";
@@ -82,7 +84,11 @@ export const FONTS: readonly FontEntry[] = [
 	{ id: "iosevka", label: "Iosevka" },
 	{ id: "opendyslexic", label: "OpenDyslexic" },
 	{ id: "atkinson-hyperlegible", label: "Atkinson Hyperlegible" },
-	...ADDITIONAL_FONTS.map(({ id, label }) => ({ id, label })),
+	...ADDITIONAL_FONTS.map((entry) =>
+		"reservedName" in entry && entry.reservedName
+			? { id: entry.id, label: entry.family, sourceLabel: entry.label }
+			: { id: entry.id, label: entry.label },
+	),
 ] as const;
 
 export const FONT_GROUPS = ["Existing choices", "Sans-serif", "Serif"] as const;

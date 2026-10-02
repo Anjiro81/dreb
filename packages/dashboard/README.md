@@ -447,23 +447,30 @@ Browser (SolidJS, hash-routed SPA)
   bold/italic faces stay lazy. Browsers without IntersectionObserver preview the
   complete open list. All 30 additions include real 400/700 normal and italic
   styles, never synthetic substitutes for those core styles. Arrow keys, Home/End, and typeahead navigate; Enter/Space commits,
-  Escape cancels, and Tab closes without changing the choice.
+  Escape cancels, and Tab closes without changing the choice. Opening explicitly
+  focuses the trigger; background scrolling closes the menu when the trigger
+  leaves the viewport, while internal list scrolling keeps it open.
   The additions are source-attributed Latin subsets with neutral internal names
-  (all OFL-licensed); see
+  (all OFL-licensed). The nine RFN-restricted additions use that neutral name as
+  their primary option/trigger name, with clearly secondary “Based on …” source
+  attribution (for example, Dreb Sans 07 / Based on Lato). Typeahead searches
+  both primary names and source families; preference IDs remain unchanged.
+  PT Serif uses Dreb Text 07 rather than Dreb Serif 07 to avoid the reserved
+  individual word Serif. See
   [`expanded/PROVENANCE.md`](src/client/assets/fonts/expanded/PROVENANCE.md).
   Existing Google-hosted IBM Plex Mono is unchanged. No font uploads or new
   multilingual bundles are added; missing scripts use browser fallback.
-  New font source assets add 5,457,532 B to the existing 1,395,464 B, for
-  6,852,996 B combined; this is the source-asset total, not a startup download.
-  Scrolling through all additions uses 2,350,576 B of regular preview resources.
-  A cold desktop fixture opened in about 19 ms and requested 109,412 B of new
+  New font source assets add 5,457,304 B to the existing 1,395,464 B, for
+  6,852,768 B combined; this is the source-asset total, not a startup download.
+  Scrolling through all additions uses 2,350,548 B of regular preview resources.
+  A cold desktop fixture opened in about 14 ms and requested 109,412 B of new
   fonts (plus five existing regular faces); closed startup requested no added
   fonts, and reopening reused loaded faces. These local measurements are not
   guarantees for every device/network. Thirty-seven choices are small DOM work;
   network payload is the main tradeoff, bounded by viewport-lazy previews.
-  Against the same-toolchain baseline, the production bundle adds 2,464 B gzipped
-  JavaScript and 1,869 B gzipped CSS (4,333 B total). The open picker adds only
-  118 elements; a 4× CPU / 150 ms latency / 1.6 Mbit/s browser check remains
+  Against the same-toolchain baseline, the production bundle adds 2,795 B gzipped
+  JavaScript and 1,881 B gzipped CSS (4,676 B total). The open picker adds only
+  136 elements; a 4× CPU / 150 ms latency / 1.6 Mbit/s browser check remains
   interactive before fonts finish downloading.
   Legal records are packaged without duplicating source WOFF2 binaries.
   No `light-dark()` (iOS Safari 16.4 floor); a synchronous `index.html` bootstrap

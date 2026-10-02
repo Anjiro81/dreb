@@ -199,6 +199,100 @@ describe("production font picker", () => {
 		expect(await trigger().getAttribute("aria-expanded")).toBe("false");
 		expect(await trigger().evaluate((element) => document.activeElement !== element)).toBe(true);
 	});
+	it("focuses non-focusing activation and routes real keyboard input without committing", async () => {
+		await page.locator("#before").focus();
+		expect(await page.evaluate(() => document.activeElement?.id)).toBe("before");
+		// HTMLElement.click() does not supply Chromium's usual mouse-button focus.
+		await trigger().evaluate((element: HTMLButtonElement) => element.click());
+		expect(await page.evaluate(() => document.activeElement?.id)).toBe("pref-font");
+		await page.keyboard.press("End");
+		expect(await trigger().getAttribute("aria-activedescendant")).toMatch(/bodoni-moda$/);
+		await page.keyboard.type("lato");
+		expect(await trigger().getAttribute("aria-activedescendant")).toMatch(/lato$/);
+		await page.keyboard.press("Escape");
+		expect(await trigger().getAttribute("aria-expanded")).toBe("false");
+		for (const key of ["Tab", "Shift+Tab"]) {
+			await trigger().evaluate((element: HTMLButtonElement) => element.click());
+			await page.keyboard.press(key);
+			expect(await trigger().getAttribute("aria-expanded")).toBe("false");
+			expect(await page.evaluate(() => document.activeElement?.id)).not.toBe("pref-font");
+		}
+		expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBeNull();
+	});
+	it.each([375, 1024])("dismisses on surrounding-page wheel scroll at %ipx without committing", async (width) => {
+		await page.setViewportSize({ width, height: 667 });
+		// Ensure surrounding-page travel independently of theme-card wrapping.
+		await page.evaluate(() => {
+			document.body.style.minHeight = "2000px";
+		});
+		await trigger().click();
+		const bottom = await trigger().evaluate((element) => element.getBoundingClientRect().bottom);
+		await page.mouse.move(2, 400); // outside the popup, not internal list scrolling
+		await page.mouse.wheel(0, Math.ceil(bottom + 150));
+		await page.waitForFunction(() => document.querySelector("#pref-font")!.getBoundingClientRect().bottom < 0);
+		await page.waitForFunction(() => document.querySelector("#pref-font")!.getAttribute("aria-expanded") === "false");
+		expect(await page.locator('[role="listbox"]').count()).toBe(0);
+		expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBeNull();
+	});
+	it("keeps internal wheel scrolling open and reaches late choices without committing", async () => {
+		await trigger().click();
+		const scrollBefore = await page.evaluate(() => scrollY);
+		const box = await page.locator('[role="listbox"]').boundingBox();
+		await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+		await page.mouse.wheel(0, 9999);
+		await page.waitForFunction(() => {
+			const list = document.querySelector('[role="listbox"]')!;
+			const bounds = list.getBoundingClientRect();
+			const last = list.querySelector('[data-font-option="bodoni-moda"]')!.getBoundingClientRect();
+			return list.scrollTop > 0 && last.top >= bounds.top && last.bottom <= bounds.bottom;
+		});
+		expect(await trigger().getAttribute("aria-expanded")).toBe("true");
+		expect(await page.evaluate(() => scrollY)).toBe(scrollBefore);
+		expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBeNull();
+		await page.locator('[data-font-option="bodoni-moda"]').click();
+		expect(await trigger().getAttribute("data-font-value")).toBe("bodoni-moda");
+	});
+	it("separates restricted primary option names from accessible source descriptions and the committed trigger", async () => {
+		const restricted = [
+			"lato",
+			"raleway",
+			"playfair-display",
+			"merriweather",
+			"lora",
+			"libre-baskerville",
+			"pt-serif",
+			"bitter",
+			"arvo",
+		];
+		for (const id of restricted) {
+			const entry = catalog.find((entry) => entry.id === id)!;
+			await trigger().click();
+			const option = page.getByRole("option", { name: entry.family, exact: true });
+			await option.scrollIntoViewIfNeeded();
+			expect(await option.locator(".font-picker-name").textContent()).toBe(entry.family);
+			const sourceId = await option.getAttribute("aria-describedby");
+			expect(await page.locator(`[id="${sourceId}"]`).textContent()).toBe(`Based on ${entry.label}`);
+			// Chromium's accessibility snapshot contains primary name and distinct description.
+			const cdp = await context.newCDPSession(page);
+			try {
+				await cdp.send("Accessibility.enable");
+				const { nodes } = await cdp.send("Accessibility.getFullAXTree");
+				const node = nodes.find((node) => node.role?.value === "option" && node.name?.value === entry.family);
+				expect(node?.description?.value).toBe(`Based on ${entry.label}`);
+			} finally {
+				await cdp.detach();
+			}
+			await option.click();
+			expect(await trigger().locator(".font-picker-name").textContent()).toBe(entry.family);
+			const selectedSourceId = await trigger().getAttribute("aria-describedby");
+			expect(await page.locator(`[id="${selectedSourceId}"]`).textContent()).toBe(`Based on ${entry.label}`);
+			expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBe(id);
+		}
+		await page.reload({ waitUntil: "networkidle" });
+		expect(await trigger().getAttribute("data-font-value")).toBe("arvo");
+		expect(await trigger().locator(".font-picker-name").textContent()).toBe("Dreb Serif 14");
+		expect(await trigger().locator(".font-picker-source").textContent()).toBe("Based on Arvo");
+	}, 30_000);
 	it("remains responsive under CPU/network throttling without waiting for typefaces", async () => {
 		const cdp = await context.newCDPSession(page);
 		await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });

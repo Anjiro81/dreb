@@ -58,6 +58,21 @@ describe("font picker", () => {
 		key("Escape");
 		expect(host.querySelector("[role=listbox]")).toBeNull();
 	});
+	it("focuses on activation even when the browser does not give button clicks focus", () => {
+		const outside = document.createElement("button");
+		document.body.append(outside);
+		outside.focus();
+		const focus = vi.spyOn(trigger(), "focus");
+		trigger().click();
+		expect(document.activeElement).toBe(trigger());
+		expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+		document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+		expect(active()?.getAttribute("data-font-option")).toBe("bodoni-moda");
+		document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+		expect(trigger().getAttribute("aria-expanded")).toBe("false");
+		expect(localStorage.getItem(FONT_STORAGE_KEY)).toBeNull();
+		outside.remove();
+	});
 	it("separates arrows/Home/End highlight from commitment and preserves theme", () => {
 		setTheme("gruvbox");
 		trigger().focus();
@@ -91,6 +106,51 @@ describe("font picker", () => {
 		key(" ");
 		expect(font()).not.toBe("theme");
 	});
+	it("names restricted derivatives primarily and describes the source before and after commitment", () => {
+		for (const entry of FONTS.filter(({ sourceLabel }) => sourceLabel)) {
+			trigger().click();
+			const option = host.querySelector<HTMLButtonElement>(`[data-font-option="${entry.id}"]`)!;
+			expect(option.getAttribute("aria-label")).toBe(entry.label);
+			expect(option.querySelector(".font-picker-name")?.textContent).toBe(entry.label);
+			expect(document.getElementById(option.getAttribute("aria-describedby")!)?.textContent).toBe(
+				`Based on ${entry.sourceLabel}`,
+			);
+			option.click();
+			expect(trigger().querySelector(".font-picker-name")?.textContent).toBe(entry.label);
+			expect(document.getElementById(trigger().getAttribute("aria-describedby")!)?.textContent).toBe(
+				`Based on ${entry.sourceLabel}`,
+			);
+			expect(font()).toBe(entry.id);
+			expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe(entry.id);
+		}
+	});
+	it("discovers restricted derivatives by source-family typeahead without committing", () => {
+		for (const entry of FONTS.filter(({ sourceLabel }) => sourceLabel)) {
+			trigger().click();
+			for (const character of entry.sourceLabel!.split(" ")[0].toLowerCase()) key(character);
+			expect(active()?.getAttribute("data-font-option")).toBe(entry.id);
+			key("Escape");
+			expect(localStorage.getItem(FONT_STORAGE_KEY)).toBeNull();
+		}
+	});
+	it.each(["above", "below"])(
+		"dismisses without committing when page scroll moves the anchor %s the viewport",
+		(direction) => {
+			trigger().click();
+			key("End");
+			vi.spyOn(trigger(), "getBoundingClientRect").mockReturnValue(
+				new DOMRect(20, direction === "above" ? -100 : window.innerHeight + 20, 200, 40),
+			);
+			vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+				callback(0);
+				return 0;
+			});
+			document.dispatchEvent(new Event("scroll"));
+			expect(trigger().getAttribute("aria-expanded")).toBe("false");
+			expect(host.querySelector("[role=listbox]")).toBeNull();
+			expect(localStorage.getItem(FONT_STORAGE_KEY)).toBeNull();
+		},
+	);
 	it("cancels Escape without leaking it, exits on Tab/Shift-Tab and dismisses outside pointers", () => {
 		const escapedEvent = vi.fn();
 		document.addEventListener("keydown", escapedEvent);

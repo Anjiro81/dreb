@@ -124,7 +124,7 @@ describe("appearance — catalog", () => {
 		]);
 		expect(FONTS).toHaveLength(37);
 		expect(new Set(FONT_IDS).size).toBe(37);
-		expect(FONTS.slice(7)).toEqual(ADDITIONAL_FONTS.map(({ id, label }) => ({ id, label })));
+		expect(FONTS.slice(7).map(({ id }) => id)).toEqual(ADDITIONAL_FONTS.map(({ id }) => id));
 		expect(ADDITIONAL_FONTS.filter(({ group }) => group === "Sans-serif")).toHaveLength(15);
 		expect(ADDITIONAL_FONTS.filter(({ group }) => group === "Serif")).toHaveLength(15);
 		expect(FONT_IDS).toEqual(FONTS.map((entry) => entry.id));
@@ -138,7 +138,9 @@ describe("appearance — catalog", () => {
 			family: string;
 			group: string;
 		}>;
-		expect(manifest.map(({ id, label, family, group }) => ({ id, label, family, group }))).toEqual(ADDITIONAL_FONTS);
+		expect(manifest.map(({ id, label, family, group }) => ({ id, label, family, group }))).toEqual(
+			ADDITIONAL_FONTS.map(({ id, label, family, group }) => ({ id, label, family, group })),
+		);
 		for (const entry of ADDITIONAL_FONTS) {
 			expect(fontFamily(entry.id)).toBe(entry.family);
 			expect(fontGroup(entry.id)).toBe(entry.group);
@@ -147,6 +149,31 @@ describe("appearance — catalog", () => {
 		for (const entry of FONTS.slice(0, 7)) expect(fontGroup(entry.id)).toBe("Existing choices");
 		expect(fontFamily("atkinson-hyperlegible")).toBe("Atkinson Hyperlegible Next");
 		expect(manifest.find(({ id }) => id === "source-serif-4")?.label).toBe("Source Serif 4");
+	});
+
+	it("keeps restricted source names secondary and excludes individual RFN words from primary names", () => {
+		let restricted = 0;
+		for (const entry of ADDITIONAL_FONTS) {
+			const header = readClientFile(`assets/fonts/expanded/licenses/${entry.id}/OFL.txt`).split(
+				"This Font Software",
+			)[0];
+			const declaration = header.match(/with Reserved Font Names? ([^\n]+)/i)?.[1];
+			const primary = FONTS.find(({ id }) => id === entry.id)!;
+			expect("reservedName" in entry && entry.reservedName).toBe(Boolean(declaration));
+			if (!declaration) {
+				expect(primary).toEqual({ id: entry.id, label: entry.label });
+				continue;
+			}
+			restricted++;
+			expect(primary).toEqual({ id: entry.id, label: entry.family, sourceLabel: entry.label });
+			const primaryWords = primary.label.toLowerCase().split(/[^a-z0-9]+/);
+			for (const word of declaration
+				.toLowerCase()
+				.split(/[^a-z0-9]+/)
+				.filter((word) => word && word !== "and"))
+				expect(primaryWords, `${entry.id} must not use reserved word ${word}`).not.toContain(word);
+		}
+		expect(restricted).toBe(9);
 	});
 
 	it.each(THEME_IDS)("Theme default previews the built-in family for %s despite an explicit override", (id) => {
