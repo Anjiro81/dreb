@@ -3618,6 +3618,8 @@ details.thinking .thinking-body {
 .font-picker-list {
 	z-index: 200;
 	overflow-y: auto;
+	/* Lazy font swaps must not undo explicit keyboard/scroll positioning. */
+	overflow-anchor: none;
 	overscroll-behavior: contain;
 	border: var(--hairline);
 	border-radius: var(--radius);

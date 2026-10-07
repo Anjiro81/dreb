@@ -77,6 +77,20 @@ async function waitForPreview(id: string, family: string): Promise<void> {
 	);
 }
 
+async function popupBounds() {
+	return page.locator('[role="listbox"]').evaluate((element) => {
+		const rect = element.getBoundingClientRect();
+		const last = element.querySelector<HTMLElement>('[data-font-option="bodoni-moda"]')!.getBoundingClientRect();
+		return {
+			fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
+			scrolls: element.scrollHeight > element.clientHeight,
+			lastVisible: last.top >= rect.top && last.bottom <= rect.bottom,
+			target: last.height,
+			documentFits: document.documentElement.scrollWidth <= innerWidth,
+		};
+	});
+}
+
 describe("production font picker", () => {
 	it("keeps closed startup lazy and limits first-open downloads to nearby regular previews", async () => {
 		expect(requests).toEqual([]);
@@ -354,21 +368,57 @@ describe("production font picker", () => {
 		await trigger().press(" ");
 		expect(await trigger().getAttribute("data-font-value")).toBe("bodoni-moda");
 	});
+	it.each([320, 375, 768])(
+		"keeps the keyboard-highlighted last option visible after delayed previews load at %ipx",
+		async (width) => {
+			await page.setViewportSize({ width, height: 568 });
+			let release!: () => void;
+			const previews = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			await page.route("**/*.woff2", async (route) => {
+				await previews;
+				await route.continue();
+			});
+			try {
+				await trigger().click();
+				await trigger().press("End");
+				await page.waitForFunction(() =>
+					[...document.fonts].some((face) => face.family.includes("Dreb Serif 15") && face.status === "loading"),
+				);
+				expect(await popupBounds()).toMatchObject({ fits: true, lastVisible: true });
+				expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBeNull();
+				release();
+				await page.waitForFunction(() =>
+					[...document.fonts].some((face) => face.family.includes("Dreb Serif 15") && face.status === "loaded"),
+				);
+				await page.evaluate(async () => {
+					await document.fonts.ready;
+					// Let font-layout and browser scroll anchoring finish before measuring.
+					await new Promise<void>((resolve) =>
+						requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+					);
+				});
+				expect(await popupBounds()).toMatchObject({
+					fits: true,
+					scrolls: true,
+					lastVisible: true,
+					documentFits: true,
+				});
+				expect(await trigger().getAttribute("aria-activedescendant")).toMatch(/bodoni-moda$/);
+				expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBeNull();
+				await trigger().press(" ");
+				expect(await trigger().getAttribute("data-font-value")).toBe("bodoni-moda");
+			} finally {
+				release();
+			}
+		},
+	);
 	it.each([320, 375, 768])("bounds the popup and keeps the last option reachable at %ipx", async (width) => {
 		await page.setViewportSize({ width, height: 568 });
 		await trigger().click();
 		await trigger().press("End");
-		const bounds = await page.locator('[role="listbox"]').evaluate((element) => {
-			const rect = element.getBoundingClientRect();
-			const last = element.querySelector<HTMLElement>('[data-font-option="bodoni-moda"]')!.getBoundingClientRect();
-			return {
-				fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
-				scrolls: element.scrollHeight > element.clientHeight,
-				lastVisible: last.top >= rect.top && last.bottom <= rect.bottom,
-				target: last.height,
-				documentFits: document.documentElement.scrollWidth <= innerWidth,
-			};
-		});
+		const bounds = await popupBounds();
 		expect(bounds).toMatchObject({ fits: true, scrolls: true, lastVisible: true, documentFits: true });
 		expect(bounds.target).toBeGreaterThanOrEqual(40);
 		await trigger().press(" ");
