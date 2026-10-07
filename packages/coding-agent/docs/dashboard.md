@@ -668,7 +668,7 @@ TUI theme system** — dashboard themes intentionally do not map to TUI themes.
   reopening reused loaded resources. Network/device speeds vary; the font
   count is inexpensive DOM work (136 additional elements), while downloads
   remain the main tradeoff. The same-toolchain production comparison adds
-  **4,676 B gzipped** across JavaScript and CSS; selected styles are fetched
+  **4,686 B gzipped** across JavaScript and CSS; selected styles are fetched
   on demand, and legal packaging does not duplicate source font binaries.
   No `light-dark()` is used, keeping an iOS Safari 16.4 floor.
 - **PWA launch colors.** The static `manifest.webmanifest` keeps white

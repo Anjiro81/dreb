@@ -469,7 +469,7 @@ Browser (SolidJS, hash-routed SPA)
   guarantees for every device/network. Thirty-seven choices are small DOM work;
   network payload is the main tradeoff, bounded by viewport-lazy previews.
   Against the same-toolchain baseline, the production bundle adds 2,795 B gzipped
-  JavaScript and 1,881 B gzipped CSS (4,676 B total). The open picker adds only
+  JavaScript and 1,891 B gzipped CSS (4,686 B total). The open picker adds only
   136 elements; a 4× CPU / 150 ms latency / 1.6 Mbit/s browser check remains
   interactive before fonts finish downloading.
   Legal records are packaged without duplicating source WOFF2 binaries.
