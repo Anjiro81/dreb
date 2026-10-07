@@ -122,6 +122,50 @@ describe("production font picker", () => {
 		await page.evaluate(() => document.fonts.ready);
 		expect(requests).toHaveLength(count);
 	});
+	it.each([375, 1024])(
+		"distinguishes category headings from font options at %ipx without committing",
+		async (width) => {
+			await page.setViewportSize({ width, height: 667 });
+			await trigger().click();
+			const headings = page.locator(".font-picker-group");
+			expect(await headings.allTextContents()).toEqual(["Existing choices", "Sans-serif fonts", "Serif fonts"]);
+			expect(await page.getByRole("listbox", { name: "font choices" }).getByRole("option").count()).toBe(37);
+			const serif = page.getByRole("group", { name: "Serif fonts", exact: true });
+			const heading = serif.locator("legend");
+			await heading.scrollIntoViewIfNeeded();
+			const presentation = await heading.evaluate((element) => {
+				const style = getComputedStyle(element);
+				const field = element.parentElement!.getBoundingClientRect();
+				const rect = element.getBoundingClientRect();
+				return {
+					fullWidth: Math.abs(field.width - rect.width) < 1,
+					fontSize: style.fontSize,
+					uppercase: style.textTransform,
+					divider: style.borderBottomStyle,
+					dividerWidth: style.borderBottomWidth,
+					color: style.color,
+					textColor: getComputedStyle(element.parentElement!).color,
+				};
+			});
+			expect(presentation).toMatchObject({
+				fullWidth: true,
+				fontSize: "12px",
+				uppercase: "uppercase",
+				divider: "solid",
+				dividerWidth: "1px",
+			});
+			expect(presentation.color).toBe(presentation.textColor);
+			const activeId = await trigger().getAttribute("aria-activedescendant");
+			await heading.click();
+			expect(await trigger().getAttribute("aria-expanded")).toBe("true");
+			expect(await trigger().getAttribute("aria-activedescendant")).toBe(activeId);
+			expect(await page.evaluate(() => document.activeElement?.id)).toBe("pref-font");
+			expect(await page.evaluate(() => localStorage.getItem("dreb.dashboard.font"))).toBeNull();
+			await page.keyboard.press("End");
+			await page.keyboard.press("Enter");
+			expect(await trigger().getAttribute("data-font-value")).toBe("bodoni-moda");
+		},
+	);
 	it("renders each added option in its loaded face as it is revealed, without fetching italic/bold-only resources", async () => {
 		await trigger().click();
 		for (const entry of catalog) await waitForPreview(entry.id, entry.family);

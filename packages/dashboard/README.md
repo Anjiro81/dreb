@@ -447,7 +447,9 @@ Browser (SolidJS, hash-routed SPA)
   bold/italic faces stay lazy. Browsers without IntersectionObserver preview the
   complete open list. All 30 additions include real 400/700 normal and italic
   styles, never synthetic substitutes for those core styles. Arrow keys, Home/End, and typeahead navigate; Enter/Space commits,
-  Escape cancels, and Tab closes without changing the choice. Opening explicitly
+  Escape cancels, and Tab closes without changing the choice. “Existing choices”,
+  “Sans-serif fonts”, and “Serif fonts” are non-selectable category headings,
+  displayed as uppercase, full-width dividers. Opening explicitly
   focuses the trigger; background scrolling closes the menu when the trigger
   leaves the viewport, while internal list scrolling keeps it open.
   The additions are source-attributed Latin subsets with neutral internal names
@@ -468,8 +470,8 @@ Browser (SolidJS, hash-routed SPA)
   fonts, and reopening reused loaded faces. These local measurements are not
   guarantees for every device/network. Thirty-seven choices are small DOM work;
   network payload is the main tradeoff, bounded by viewport-lazy previews.
-  Against the same-toolchain baseline, the production bundle adds 2,795 B gzipped
-  JavaScript and 1,891 B gzipped CSS (4,686 B total). The open picker adds only
+  Against the same-toolchain baseline, the production bundle adds 2,815 B gzipped
+  JavaScript and 1,922 B gzipped CSS (4,737 B total). The open picker adds only
   136 elements; a 4× CPU / 150 ms latency / 1.6 Mbit/s browser check remains
   interactive before fonts finish downloading.
   Legal records are packaged without duplicating source WOFF2 binaries.
@@ -477,6 +479,16 @@ Browser (SolidJS, hash-routed SPA)
   prevents a wrong-appearance flash. The static
   `manifest.webmanifest` keeps white (default-light) launch colors as the
   fallback, while the live `theme-color` meta follows the active appearance.
+
+### Custom fonts
+
+There is no GUI font upload, runtime custom-font directory, or font-path setting.
+The Files screen and OS font installation do not add picker entries. The
+released Dashboard uses its bundled catalog; adding a font manually currently
+requires a source checkout, registry/CSS/bootstrap changes and a rebuild. See
+[the private-source-build workflow](../coding-agent/docs/dashboard.md#custom-fonts-in-a-source-build)
+for the exact files, licensing requirements and validation steps. Keep uploads
+as a separate feature rather than modifying an installed npm package.
 
 ## Development
 

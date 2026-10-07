@@ -53,6 +53,16 @@ describe("font picker", () => {
 			[...popup.querySelectorAll<HTMLButtonElement>("[role=option]")].map((element) => element.dataset.fontOption),
 		).toEqual(FONTS.map((entry) => entry.id));
 		expect(popup.querySelectorAll("fieldset")).toHaveLength(3);
+		const headings = [...popup.querySelectorAll("legend")];
+		expect(headings.map((heading) => heading.textContent)).toEqual([
+			"Existing choices",
+			"Sans-serif fonts",
+			"Serif fonts",
+		]);
+		for (const heading of headings) {
+			expect(heading.getAttribute("role")).toBeNull();
+			expect(heading.tabIndex).toBe(-1);
+		}
 		expect(active()?.getAttribute("data-font-option")).toBe("theme");
 		expect(popup.querySelectorAll('[aria-selected="true"]')).toHaveLength(1);
 		key("Escape");

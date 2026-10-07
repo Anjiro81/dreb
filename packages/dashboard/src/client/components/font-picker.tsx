@@ -221,8 +221,10 @@ export function FontPicker(): JSX.Element {
 				>
 					<For each={FONT_GROUPS}>
 						{(group) => (
-							<fieldset aria-label={group}>
-								<legend class="font-picker-group">{group}</legend>
+							<fieldset aria-label={group === "Existing choices" ? group : `${group} fonts`}>
+								<legend class="font-picker-group" onPointerDown={(event) => event.preventDefault()}>
+									{group === "Existing choices" ? group : `${group} fonts`}
+								</legend>
 								<For each={FONTS.filter((entry) => fontGroup(entry.id) === group)}>
 									{(entry) => (
 										<button

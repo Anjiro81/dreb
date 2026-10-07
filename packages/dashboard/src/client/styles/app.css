@@ -3636,10 +3636,20 @@ details.thinking .thinking-body {
 	min-width: 0;
 }
 
+.font-picker-list fieldset + fieldset {
+	margin-top: var(--space-2);
+}
+
 .font-picker-group {
+	width: 100%;
 	padding: var(--space-2);
-	font-size: var(--fs-micro);
-	color: var(--muted);
+	margin-bottom: var(--space-1);
+	border-bottom: var(--hairline);
+	font-size: var(--fs-small);
+	font-weight: 400;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text);
 }
 
 .font-picker-option {

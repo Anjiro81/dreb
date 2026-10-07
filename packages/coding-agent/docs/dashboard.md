@@ -630,6 +630,9 @@ TUI theme system** — dashboard themes intentionally do not map to TUI themes.
   combobox supports Arrow Up/Down, Home/End, and typeahead to highlight options
   without changing the saved choice; Enter/Space opens or commits, Escape
   closes without committing, and Tab closes and moves focus without committing.
+  “Existing choices”, “Sans-serif fonts”, and “Serif fonts” are non-selectable
+  category headings, shown as uppercase, full-width dividers—not font options
+  or the smaller “Based on …” source descriptions.
   Opening explicitly focuses the trigger. Background scrolling dismisses the
   menu when its trigger leaves the viewport; internal catalog scrolling does not.
   RFN-restricted additions have neutral primary option/trigger names and separate
@@ -668,12 +671,74 @@ TUI theme system** — dashboard themes intentionally do not map to TUI themes.
   reopening reused loaded resources. Network/device speeds vary; the font
   count is inexpensive DOM work (136 additional elements), while downloads
   remain the main tradeoff. The same-toolchain production comparison adds
-  **4,686 B gzipped** across JavaScript and CSS; selected styles are fetched
+  **4,737 B gzipped** across JavaScript and CSS; selected styles are fetched
   on demand, and legal packaging does not duplicate source font binaries.
   No `light-dark()` is used, keeping an iOS Safari 16.4 floor.
 - **PWA launch colors.** The static `manifest.webmanifest` keeps white
   (default-light) launch colors as the fallback; the live `theme-color` meta
   follows the active appearance once the app loads.
+
+### Custom fonts in a source build
+
+The released Dashboard supports its bundled catalog only. There is **no font
+upload control, custom-font install directory, settings-file font path, or
+runtime font discovery**. Uploading a font through the host Files screen does
+not register it with the appearance picker; installing it in your OS does not
+add a picker entry either. Font uploads are a separate feature, not a hidden
+configuration option.
+
+For a private customization, manually add the font to a **source checkout** and
+rebuild Dashboard. This is a developer workflow; npm upgrades do not preserve
+edits to an installed package:
+
+1. Put legally usable WOFF2 files and their license/provenance under
+   `packages/dashboard/src/client/assets/fonts/custom/`. Keep them separate from
+   `expanded/`, which is the hash-locked, generated catalog. Retain required
+   notices and obey Reserved Font Name rules if modifying a font. Supply genuine
+   normal/italic and weight faces for the styles you intend to use.
+2. Add a unique ID, label, CSS family, and existing `Sans-serif` or `Serif` group
+   to `packages/dashboard/src/client/state/font-catalog.ts`. For example:
+   ```ts
+   { id: "my-custom-font", label: "My Custom Font", family: "My Custom Font", group: "Sans-serif" },
+   ```
+   `appearance.ts` derives the valid IDs, picker entries and preview stack from
+   this registry. Keep restricted derivative names neutral, with secondary
+   source attribution using the registry's existing naming pattern.
+3. Create `packages/dashboard/src/client/styles/custom-fonts.css` with the real
+   faces and a scoped font override. For a regular-400 face:
+   ```css
+   @font-face {
+     font-family: "My Custom Font";
+     src: url("../assets/fonts/custom/my-custom-font-regular.woff2") format("woff2");
+     font-style: normal;
+     font-weight: 400;
+     font-display: swap;
+   }
+   [data-font="my-custom-font"] {
+     --mono-font: "My Custom Font", "IBM Plex Mono", "Courier New", monospace;
+   }
+   ```
+   Add corresponding rules for the other real faces. Link this stylesheet in
+   `packages/dashboard/src/client/index.html` **after** `font-catalog.css`; do
+   not append hand-written rules to the generated stylesheet.
+4. Add `my-custom-font` to the inline `FONTS` allowlist in that same HTML file so
+   saved selection restores synchronously. Update the catalog/count/group and
+   bootstrap test expectations for your private extra entry; retain the
+   existing checks for the managed `expanded/` records. If distributing your
+   build, include custom notices/provenance in Dashboard's `package.json`
+   `files` list as well as the built font resources.
+5. From the repository root, using Node 22, run `npm run check`, `npm run build`,
+   and `npm run verify-workspace-links`, then the Dashboard tests:
+   ```sh
+   npm run test --workspace @dreb/dashboard
+   node packages/dashboard/dist/index.js
+   ```
+   Use this built server, not an unchanged globally installed Dashboard. Check
+   selection, reload restoration, actual face loading and fallback behavior.
+
+There is no need to change server/RPC code for a private bundled font. A GUI
+upload feature would additionally need validation, storage, registration,
+persistence and licensing handling; it remains separate from this catalog.
 
 ## Limitations (deliberate, sequenced later)
 
