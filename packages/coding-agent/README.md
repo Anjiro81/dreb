@@ -1,3 +1,5 @@
+> **Personal downstream:** cloud workspaces on this branch is maintained in the user's fork, not shipped or endorsed by upstream. See the [maintenance/source-launch guide](../../CLOUD-WORKSPACES-MAINTENANCE.md); the generic installation instructions below install upstream packages, not this downstream build.
+
 dreb is an open-source terminal coding agent, forked from [pi-mono](https://github.com/badlogic/pi-mono) (itself derived from Claude Code). It has *fewer* features than Claude Code by design — the bet is that a small, hackable core you can shape beats a large feature set you can't.
 
 Claude Code is a great product. dreb isn't trying to compete on features — it's trying to compete on flexibility. The core is kept minimal; what you'd find baked into other tools, you build here with [skills](#skills) (markdown workflows), [extensions](#extensions) (TypeScript), or install from third-party [packages](#packages).

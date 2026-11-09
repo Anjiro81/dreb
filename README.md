@@ -1,5 +1,7 @@
 # dreb
 
+> **Personal cloud workspaces downstream:** this branch is maintained in [Anjiro81/dreb](https://github.com/Anjiro81/dreb/tree/personal/cloud-workspaces), not an active upstream feature proposal or a drop-in extension. For this build, follow the [maintenance and source-launch guide](CLOUD-WORKSPACES-MAINTENANCE.md) instead of the upstream installation commands below. Source ownership does not update an installed application.
+
 dreb is a hackable, open-source terminal coding agent and agent runtime for people who want to own their AI development workflow. It gives you a practical coding assistant today — tools, sessions, memory, model switching, subagents, and a polished TUI — while keeping the core flexible enough to reshape with skills, extensions, packages, custom providers, and alternate frontends. Its web dashboard puts every agent session in the browser: start work at your desk, steer it from your phone.
 
 Use dreb if you want a coding agent that can run against direct APIs, coding subscriptions, proxies, cloud providers, local models, or your own provider code; if you want workflows such as issue-to-merge automation and multi-agent review to be inspectable and replaceable; or if you want an agent runtime you can embed in a CLI, an RPC process, an SDK integration, a web dashboard, or a Telegram bot.

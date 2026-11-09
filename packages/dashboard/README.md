@@ -1,5 +1,7 @@
 # @dreb/dashboard
 
+> **Personal downstream:** this branch retains cloud workspaces as a fork integration, not an upstream Dashboard feature or a drop-in extension. See the [maintenance/source-launch guide](../../CLOUD-WORKSPACES-MAINTENANCE.md). The npm commands below install upstream packages, not this downstream build.
+
 Web dashboard for [dreb](https://github.com/aebrer/dreb) — a visual, real-time,
 mobile-friendly interface for browsing projects and sessions, controlling
 multiple dreb agents, watching background subagents live, and using dreb from
