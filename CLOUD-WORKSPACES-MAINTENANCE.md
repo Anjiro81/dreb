@@ -34,7 +34,7 @@ Here `origin` is the personal fork and `upstream` is aebrer/dreb. Development lo
 
 ## Build and check before use
 
-Follow [AGENTS.md](AGENTS.md) and the [development guide](packages/coding-agent/docs/development.md). Use the Node version in `.nvmrc` and its bundled npm. A first checkout needs a reviewed dependency bootstrap (`npm ci`, including the normal Husky prepare step); the initial adoption work does not run an install or download locally.
+Follow [AGENTS.md](AGENTS.md) and the [development guide](packages/coding-agent/docs/development.md). Use the Node version in `.nvmrc` and its bundled npm. A first checkout needs a reviewed dependency bootstrap (`npm ci`, including the normal Husky prepare step), then a build before the first type check: generated model sources and exported declaration files do not exist in a source-only clone. This adoption reused existing local dependencies and validated build artifacts without a dependency/browser/model-weight install.
 
 Every development check, build, test and commit hook must use disposable `HOME`, `USERPROFILE` and `DREB_CODING_AGENT_DIR`, explicit offline/no-local-LLM flags, and existing browser binaries. For example, from a checkout whose dependencies and Chromium cache are already available:
 
@@ -47,14 +47,14 @@ BROWSER_CACHE="/absolute/path/to/existing/ms-playwright"
   export DREB_CODING_AGENT_DIR="$CHECK_ROOT/agent"
   export DREB_LIVE_API=0 DREB_LIVE_API_EXPENSIVE=0 DREB_NO_LOCAL_LLM=1
   export PLAYWRIGHT_BROWSERS_PATH="$BROWSER_CACHE"
-  npm run check
   npm run build
+  npm run check
   npm run verify-workspace-links
   bash test.sh
 )
 ```
 
-Use the appropriate Node executable on `PATH`. Do not enable live-provider tests, download browser binaries or inspect real provider/settings/log files as part of a check. Keep the disposable evidence until results have been recorded. The normal commit hook must run without bypass under the same isolation. GitHub/Git credential operations can retain their normal authentication context, but **every executed Git hook** must receive the disposable profile; do not disable hooks to work around that distinction.
+Use the appropriate Node executable on `PATH`. These flags disable live-provider/local-LLM tests, not all network traffic: the existing standard build refreshes unauthenticated public model catalogs. A completely network-isolated, reproducible artifact build remains a separate packaging task; do not claim these flags provide it. Do not enable paid/live-provider tests, download browser binaries/model weights or inspect real provider/settings/log files as part of a check. Keep the disposable evidence until results have been recorded. The normal commit hook must run without bypass under the same isolation. GitHub/Git credential operations can retain their normal authentication context, but **every executed Git hook** must receive the disposable profile; do not disable hooks to work around that distinction.
 
 Retain focused regressions for identity/disconnect/native aliases/consent, first settings creation versus a helper subprocess, authenticated cold metadata, local bypass, exact-parent resume and pending modal ownership. Build before compiled browser/filesystem acceptance, using temporary host folders and profiles. Synthetic Chromium and fixture evidence is not native Windows/Safari, real Tailscale/cloud/provider or full-history certification. Required root checks do not turn the separately documented optional client-only baseline diagnostics into a pass.
 
